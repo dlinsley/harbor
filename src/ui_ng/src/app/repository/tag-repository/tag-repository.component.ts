@@ -1,4 +1,17 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
 import { RepositoryService } from '../repository.service';
@@ -22,7 +35,8 @@ import { Project } from '../../project/project';
 @Component({
   selector: 'tag-repository',
   templateUrl: 'tag-repository.component.html',
-  styleUrls: ['./tag-repository.component.css']
+  styleUrls: ['./tag-repository.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TagRepositoryComponent implements OnInit, OnDestroy {
 
@@ -45,7 +59,7 @@ export class TagRepositoryComponent implements OnInit, OnDestroy {
 
   selectAll: boolean = false;
 
-  private subscription: Subscription;
+  subscription: Subscription;
 
   constructor(
     private route: ActivatedRoute,
@@ -53,8 +67,9 @@ export class TagRepositoryComponent implements OnInit, OnDestroy {
     private deletionDialogService: ConfirmationDialogService,
     private repositoryService: RepositoryService,
     private appConfigService: AppConfigService,
-    private session: SessionService){
-    
+    private session: SessionService,
+    private ref: ChangeDetectorRef){
+
     this.subscription = this.deletionDialogService.confirmationConfirm$.subscribe(
       message => {
         if (message &&
@@ -72,7 +87,6 @@ export class TagRepositoryComponent implements OnInit, OnDestroy {
                 response => {
                   this.retrieve();
                   this.messageHandlerService.showSuccess('REPOSITORY.DELETED_TAG_SUCCESS');
-                  console.log('Deleted repo:' + this.repoName + ' with tag:' + tagName);
                 },
                 error => this.messageHandlerService.handleError(error)
               );
@@ -119,7 +133,7 @@ export class TagRepositoryComponent implements OnInit, OnDestroy {
     }
   }
 
-  private listTags(tags: Tag[]): void {
+  listTags(tags: Tag[]): void {
     tags.forEach(t => {
       let tag = new TagView();
       tag.tag = t.tag;
@@ -135,6 +149,8 @@ export class TagRepositoryComponent implements OnInit, OnDestroy {
       tag.parent = data['parent'];
       this.tags.push(tag);
     });
+    let hnd = setInterval(()=>this.ref.markForCheck(), 100);
+    setTimeout(()=>clearInterval(hnd), 1000);
   }
 
   deleteTag(tag: TagView) {
@@ -174,7 +190,7 @@ export class TagRepositoryComponent implements OnInit, OnDestroy {
       this.showTagManifestOpened = true;
     }
   }
-  selectAndCopy($event) {
+  selectAndCopy($event: any) {
     $event.target.select();
   }
 }

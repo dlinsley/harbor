@@ -1,4 +1,17 @@
-import { Component, Input, Output, EventEmitter, ViewChild, OnDestroy } from '@angular/core';
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+import { Component, Input, Output, EventEmitter, ViewChild, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 
 import { ReplicationService } from '../../replication/replication.service';
 import { Policy } from '../../replication/policy';
@@ -15,6 +28,7 @@ import { Subscription } from 'rxjs/Subscription';
 @Component({
   selector: 'list-policy',
   templateUrl: 'list-policy.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ListPolicyComponent implements OnDestroy {
 
@@ -36,8 +50,9 @@ export class ListPolicyComponent implements OnDestroy {
     private replicationService: ReplicationService,
     private toggleConfirmDialogService: ConfirmationDialogService,
     private deletionDialogService: ConfirmationDialogService,
-    private messageHandlerService: MessageHandlerService) {
-
+    private messageHandlerService: MessageHandlerService,
+    private ref: ChangeDetectorRef) {
+    setInterval(()=>ref.markForCheck(), 500);
     this.toggleSubscription = this.toggleConfirmDialogService
         .confirmationConfirm$
         .subscribe(
@@ -47,13 +62,11 @@ export class ListPolicyComponent implements OnDestroy {
              message.state === ConfirmationState.CONFIRMED) {
                let policy: Policy = message.data;
                policy.enabled = policy.enabled === 0 ? 1 : 0;
-               console.log('Enable policy ID:' + policy.id + ' with activation status ' + policy.enabled);
                this.replicationService
                    .enablePolicy(policy.id, policy.enabled)
                    .subscribe(
                       response => {
                         this.messageHandlerService.showSuccess('REPLICATION.TOGGLED_SUCCESS');
-                        console.log('Successful toggled policy status')
                       },
                       error => this.messageHandlerService.handleError(error)
                    );
@@ -72,7 +85,6 @@ export class ListPolicyComponent implements OnDestroy {
                 .subscribe(
                   response => {
                     this.messageHandlerService.showSuccess('REPLICATION.DELETED_SUCCESS');
-                    console.log('Successful delete policy with ID:' + message.data);
                     this.reload.emit(true);
                   },
                   error => {
@@ -85,8 +97,7 @@ export class ListPolicyComponent implements OnDestroy {
                 );
         }
       }
-    );
-
+    );  
   }
 
   ngOnDestroy() {
@@ -100,12 +111,10 @@ export class ListPolicyComponent implements OnDestroy {
 
   selectPolicy(policy: Policy): void {
     this.selectedId = policy.id;
-    console.log('Select policy ID:' + policy.id);
     this.selectOne.emit(policy);
   }
 
   editPolicy(policy: Policy) {
-    console.log('Open modal to edit policy.');
     this.editOne.emit(policy);
   }
 

@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, Input, ViewChild } from '@angular/core';
 import { NgForm } from '@angular/forms';
 import { Subscription } from 'rxjs/Subscription';
@@ -10,7 +23,7 @@ import { Configuration } from '../config';
     styleUrls: ['../config.component.css']
 })
 export class ConfigurationAuthComponent {
-    private changeSub: Subscription;
+    changeSub: Subscription;
     @Input("ldapConfig") currentConfig: Configuration = new Configuration();
 
     @ViewChild("authConfigFrom") authForm: NgForm;
@@ -31,7 +44,7 @@ export class ConfigurationAuthComponent {
         }
     }
 
-    private disabled(prop: any): boolean {
+    disabled(prop: any): boolean {
         return !(prop && prop.editable);
     }
 
@@ -39,7 +52,7 @@ export class ConfigurationAuthComponent {
         return this.authForm && this.authForm.valid;
     }
 
-    private handleOnChange($event): void {
+    handleOnChange($event: any): void {
         if ($event && $event.target && $event.target["value"]) {
             let authMode = $event.target["value"];
             if (authMode === 'ldap_auth') {

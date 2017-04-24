@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -11,15 +24,15 @@ import { Subscription } from "rxjs";
     styleUrls: ['inline-alert.component.css']
 })
 export class InlineAlertComponent {
-    private inlineAlertType: string = 'alert-danger';
-    private inlineAlertClosable: boolean = false;
-    private alertClose: boolean = true;
-    private displayedText: string = "";
-    private showCancelAction: boolean = false;
-    private useAppLevelStyle: boolean = false;
-    private timer: Subscription = null;
-    private count: number = 0;
-    private blinking: boolean = false;
+    inlineAlertType: string = 'alert-danger';
+    inlineAlertClosable: boolean = false;
+    alertClose: boolean = true;
+    displayedText: string = "";
+    showCancelAction: boolean = false;
+    useAppLevelStyle: boolean = false;
+    timer: Subscription = null;
+    count: number = 0;
+    blinking: boolean = false;
 
     @Output() confirmEvt = new EventEmitter<boolean>();
 
@@ -77,7 +90,7 @@ export class InlineAlertComponent {
     public blink() {
     }
 
-    private confirmCancel(): void {
+    confirmCancel(): void {
         this.confirmEvt.emit(true);
     }
 }

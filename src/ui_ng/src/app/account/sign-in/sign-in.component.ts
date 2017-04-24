@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, OnInit } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { Input, ViewChild, AfterViewChecked } from '@angular/core';
@@ -14,7 +27,7 @@ import { AppConfigService } from '../../app-config.service';
 import { AppConfig } from '../../app-config';
 import { User } from '../../user/user';
 
-import { CookieService, CookieOptions } from 'angular2-cookie/core';
+import { CookieService, CookieOptions } from 'ngx-cookie';
 
 //Define status flags for signing in states
 export const signInStatusNormal = 0;
@@ -30,11 +43,11 @@ const expireDays = 10;
 })
 
 export class SignInComponent implements AfterViewChecked, OnInit {
-    private redirectUrl: string = "";
-    private appConfig: AppConfig = new AppConfig();
+    redirectUrl: string = "";
+    appConfig: AppConfig = new AppConfig();
     //Remeber me indicator
-    private rememberMe: boolean = false;
-    private rememberedName: string = "";
+    rememberMe: boolean = false;
+    rememberedName: string = "";
     //Form reference
     signInForm: NgForm;
     @ViewChild('signInForm') currentForm: NgForm;
@@ -82,7 +95,7 @@ export class SignInComponent implements AfterViewChecked, OnInit {
 
     //App title
     public get appTitle(): string {
-        if(this.appConfig && this.appConfig.with_admiral){
+        if (this.appConfig && this.appConfig.with_admiral) {
             return "APP_TITLE.VIC";
         }
 
@@ -113,7 +126,7 @@ export class SignInComponent implements AfterViewChecked, OnInit {
         return this.appConfig.auth_mode != 'ldap_auth';
     }
 
-    private clickRememberMe($event): void {
+    clickRememberMe($event: any): void {
         if ($event && $event.target) {
             this.rememberMe = $event.target.checked;
             if (!this.rememberMe) {
@@ -124,22 +137,23 @@ export class SignInComponent implements AfterViewChecked, OnInit {
         }
     }
 
-    private remeberMe(): void {
+    remeberMe(): void {
         if (this.rememberMe) {
             if (this.rememberedName != this.signInCredential.principal) {
                 //Set expire time
                 let expires: number = expireDays * 3600 * 24 * 1000;
-                let date = new Date(Date.now() + expires); 
-                let cookieptions = new CookieOptions({
+                let date = new Date(Date.now() + expires);
+                let cookieptions: CookieOptions = {
+                    path: "/",
                     expires: date
-                });
+                };
                 this.cookie.put(remCookieKey, this.signInCredential.principal, cookieptions);
             }
         }
     }
 
     //General error handler
-    private handleError(error) {
+    handleError(error: any) {
         //Set error status
         this.signInStatus = signInStatusError;
 
@@ -148,7 +162,7 @@ export class SignInComponent implements AfterViewChecked, OnInit {
     }
 
     //Hande form values changes
-    private formChanged() {
+    formChanged() {
         if (this.currentForm === this.signInForm) {
             return;
         }
@@ -163,7 +177,7 @@ export class SignInComponent implements AfterViewChecked, OnInit {
     }
 
     //Fill the new user info into the sign in form
-    private handleUserCreation(user: User): void {
+    handleUserCreation(user: User): void {
         if (user) {
             this.currentForm.setValue({
                 "login_username": user.username,
@@ -191,7 +205,14 @@ export class SignInComponent implements AfterViewChecked, OnInit {
     //Trigger the signin action
     signIn(): void {
         //Should validate input firstly
-        if (!this.isValid || this.isOnGoing) {
+        if (!this.isValid) {
+            //Set error status
+            this.signInStatus = signInStatusError;
+            return;
+        }
+
+        if (this.isOnGoing) {
+            //Ongoing, directly return
             return;
         }
 
@@ -202,7 +223,8 @@ export class SignInComponent implements AfterViewChecked, OnInit {
         this.session.signIn(this.signInCredential)
             .then(() => {
                 //Set status
-                this.signInStatus = signInStatusNormal;
+                //Keep it ongoing to keep the button 'disabled'
+                //this.signInStatus = signInStatusNormal;
 
                 //Remeber me
                 this.remeberMe();

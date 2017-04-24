@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import {
     Component,
     ViewChild,
@@ -29,23 +42,25 @@ export class NewUserFormComponent implements AfterViewChecked, OnInit {
     //Notify the form value changes
     @Output() valueChange = new EventEmitter<boolean>();
 
+    confirmedPwd: string;
+
     constructor(private session: SessionService) { }
 
     ngOnInit() {
         this.resetState();
     }
 
-    private validationStateMap: any = {};
+    validationStateMap: any = {};
 
-    private mailAlreadyChecked: any = {};
-    private userNameAlreadyChecked: any = {};
-    private emailTooltip: string = 'TOOLTIP.EMAIL';
-    private usernameTooltip: string = 'TOOLTIP.USER_NAME';
-    private formValueChanged: boolean = false;
+    mailAlreadyChecked: any = {};
+    userNameAlreadyChecked: any = {};
+    emailTooltip: string = 'TOOLTIP.EMAIL';
+    usernameTooltip: string = 'TOOLTIP.USER_NAME';
+    formValueChanged: boolean = false;
 
-    private checkOnGoing: any = {};
+    checkOnGoing: any = {};
 
-    private resetState(): void {
+    resetState(): void {
         this.mailAlreadyChecked = {};
         this.userNameAlreadyChecked = {};
         this.emailTooltip = 'TOOLTIP.EMAIL';
@@ -69,11 +84,11 @@ export class NewUserFormComponent implements AfterViewChecked, OnInit {
         return !this.checkOnGoing[key];
     }
 
-    private getValidationState(key: string): boolean {
+    getValidationState(key: string): boolean {
         return !this.validationStateMap[key];
     }
 
-    private handleValidation(key: string, flag: boolean): void {
+    handleValidation(key: string, flag: boolean): void {
         if (flag) {
             //Checking
             let cont = this.newUserForm.controls[key];

@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, Params, Router } from '@angular/router';
 
@@ -64,7 +77,6 @@ export class AuditLogComponent implements OnInit {
 
   ngOnInit(): void {
     this.projectId = +this.route.snapshot.parent.params['id'];
-    console.log('Get projectId from route params snapshot:' + this.projectId);
     this.queryParam.project_id = this.projectId;
     this.queryParam.page_size = this.pageSize;
   }
@@ -79,7 +91,6 @@ export class AuditLogComponent implements OnInit {
           response=>{
             this.totalRecordCount = response.headers.get('x-total-count');
             this.totalPage = Math.ceil(this.totalRecordCount / this.pageSize);
-            console.log('TotalRecordCount:' + this.totalRecordCount + ', totalPage:' + this.totalPage);
             this.auditLogs = response.json();
           },
           error=>{
@@ -104,7 +115,6 @@ export class AuditLogComponent implements OnInit {
       this.queryParam.end_timestamp = new Date(strDate).getTime() / 1000 + oneDayOffset;
       break;
     }
-    console.log('Search audit log filtered by time range, begin: ' + this.queryParam.begin_timestamp + ', end:' + this.queryParam.end_timestamp);
     this.retrieve();
   }
 
@@ -123,8 +133,7 @@ export class AuditLogComponent implements OnInit {
       operationFilter = [];
     }
     this.queryParam.keywords = operationFilter.join('/');
-    this.retrieve();
-    console.log('Search option filter:' + operationFilter.join('/'));
+    this.retrieve();    
   }
 
   toggleOptionalName(option: number): void {

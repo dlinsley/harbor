@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, OnInit, ViewChild, AfterViewChecked } from '@angular/core';
 import { NgForm } from '@angular/forms';
 
@@ -18,21 +31,21 @@ export class AccountSettingsModalComponent implements OnInit, AfterViewChecked {
     account: SessionUser;
     error: any = null;
     originalStaticData: SessionUser;
-    private emailTooltip: string = 'TOOLTIP.EMAIL';
+    emailTooltip: string = 'TOOLTIP.EMAIL';
     private validationStateMap: any = {
         "account_settings_email": true,
         "account_settings_full_name": true
     };
-    private mailAlreadyChecked = {};
+    mailAlreadyChecked = {};
 
-    private isOnCalling: boolean = false;
-    private formValueChanged: boolean = false;
-    private checkOnGoing: boolean = false;
+    isOnCalling: boolean = false;
+    formValueChanged: boolean = false;
+    checkOnGoing: boolean = false;
 
     accountFormRef: NgForm;
     @ViewChild("accountSettingsFrom") accountForm: NgForm;
     @ViewChild(InlineAlertComponent)
-    private inlineAlert: InlineAlertComponent;
+    inlineAlert: InlineAlertComponent;
 
     constructor(
         private session: SessionService,
@@ -43,11 +56,11 @@ export class AccountSettingsModalComponent implements OnInit, AfterViewChecked {
         this.account = Object.assign({}, this.session.getCurrentUser());
     }
 
-    private getValidationState(key: string): boolean {
+    getValidationState(key: string): boolean {
         return this.validationStateMap[key];
     }
 
-    private handleValidation(key: string, flag: boolean): void {
+    handleValidation(key: string, flag: boolean): void {
         if (flag) {
             //Checking
             let cont = this.accountForm.controls[key];
@@ -91,7 +104,7 @@ export class AccountSettingsModalComponent implements OnInit, AfterViewChecked {
         }
     }
 
-    private isUserDataChange(): boolean {
+    isUserDataChange(): boolean {
         if (!this.originalStaticData || !this.account) {
             return false;
         }
@@ -202,7 +215,7 @@ export class AccountSettingsModalComponent implements OnInit, AfterViewChecked {
             });
     }
 
-    confirmCancel(): void {
+    confirmCancel($event: any): void {
         this.inlineAlert.close();
         this.opened = false;
     }

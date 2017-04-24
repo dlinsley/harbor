@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, Output, ViewChild, EventEmitter } from '@angular/core';
 import { NgForm } from '@angular/forms';
 
@@ -17,9 +30,9 @@ import { Modal } from 'clarity-angular';
 export class SignUpComponent {
     opened: boolean = false;
     staticBackdrop: boolean = true;
-    private error: any;
-    private onGoing: boolean = false;
-    private formValueChanged: boolean = false;
+    error: any;
+    onGoing: boolean = false;
+    formValueChanged: boolean = false;
 
     @Output() userCreation = new EventEmitter<User>();
 
@@ -28,15 +41,15 @@ export class SignUpComponent {
         private userService: UserService) { }
 
     @ViewChild(NewUserFormComponent)
-    private newUserForm: NewUserFormComponent;
+    newUserForm: NewUserFormComponent;
 
     @ViewChild(InlineAlertComponent)
-    private inlienAlert: InlineAlertComponent;
+    inlienAlert: InlineAlertComponent;
 
     @ViewChild(Modal)
-    private modal: Modal;
+    modal: Modal;
 
-    private getNewUser(): User {
+    getNewUser(): User {
         return this.newUserForm.getData();
     }
 
@@ -84,7 +97,7 @@ export class SignUpComponent {
         }
     }
 
-    confirmCancel(): void {
+    confirmCancel($event: any): void {
         this.opened = false;
         this.modal.close();
     }

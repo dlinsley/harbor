@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 
@@ -17,11 +30,11 @@ import { errorHandler, accessErrorHandler } from '../shared/shared.utils';
 })
 
 export class RecentLogComponent implements OnInit {
-    private sessionUser: SessionUser = null;
-    private recentLogs: AuditLog[];
-    private logsCache: AuditLog[];
-    private onGoing: boolean = false;
-    private lines: number = 10; //Support 10, 25 and 50
+    sessionUser: SessionUser = null;
+    recentLogs: AuditLog[];
+    logsCache: AuditLog[];
+    onGoing: boolean = false;
+    lines: number = 10; //Support 10, 25 and 50
     currentTerm: string;
 
     constructor(
@@ -35,7 +48,7 @@ export class RecentLogComponent implements OnInit {
         this.retrieveLogs();
     }
 
-    private handleOnchange($event: any) {
+    handleOnchange($event: any) {
         this.currentTerm = '';
         if ($event && $event.target && $event.target["value"]) {
             this.lines = $event.target["value"];
@@ -67,7 +80,7 @@ export class RecentLogComponent implements OnInit {
         this.retrieveLogs();
     }
 
-    private retrieveLogs(): void {
+    retrieveLogs(): void {
         if (this.lines < 10) {
             this.lines = 10;
         }
@@ -89,7 +102,7 @@ export class RecentLogComponent implements OnInit {
             );
     }
 
-    private isMatched(terms: string, log: AuditLog): boolean {
+    isMatched(terms: string, log: AuditLog): boolean {
         let reg = new RegExp('.*' + terms + '.*', 'i');
         return reg.test(log.username) ||
             reg.test(log.repo_name) ||

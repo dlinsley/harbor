@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, Output, EventEmitter, OnInit } from '@angular/core';
 import { Router, NavigationExtras } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
@@ -7,7 +20,7 @@ import { modalEvents } from '../modal-events.const';
 
 import { SessionUser } from '../../shared/session-user';
 import { SessionService } from '../../shared/session.service';
-import { CookieService } from 'angular2-cookie/core';
+import { CookieService, CookieOptions } from 'ngx-cookie';
 
 import { supportedLangs, enLang, languageNames, CommonRoutes } from '../../shared/shared.const';
 import { AppConfigService } from '../../app-config.service';
@@ -25,8 +38,8 @@ export class NavigatorComponent implements OnInit {
     @Output() showAccountSettingsModal = new EventEmitter<ModalEvent>();
     @Output() showPwdChangeModal = new EventEmitter<ModalEvent>();
 
-    private selectedLang: string = enLang;
-    private appTitle: string = 'APP_TITLE.HARBOR';
+    selectedLang: string = enLang;
+    appTitle: string = 'APP_TITLE.HARBOR';
 
     constructor(
         private session: SessionService,
@@ -41,10 +54,11 @@ export class NavigatorComponent implements OnInit {
 
     ngOnInit(): void {
         this.selectedLang = this.translate.currentLang;
-        this.translate.onLangChange.subscribe(langChange => {
+        this.translate.onLangChange.subscribe((langChange: {lang: string}) => {
             this.selectedLang = langChange.lang;
             //Keep in cookie for next use
-            this.cookie.put("harbor-lang", langChange.lang);
+            let opt:CookieOptions = {path: '/', expires: new Date(Date.now() + 3600*1000*24*31)};
+            this.cookie.put("harbor-lang", langChange.lang, opt);
         });
         if (this.appConfigService.isIntegrationMode()) {
             this.appTitle = 'APP_TITLE.VIC';
@@ -126,16 +140,14 @@ export class NavigatorComponent implements OnInit {
 
     //Switch languages
     switchLanguage(lang: string): void {
+        let selectedLang: string = enLang;//Default
         if (supportedLangs.find(supportedLang => supportedLang === lang.trim())) {
-            this.translate.use(lang);
+            selectedLang = lang;
         } else {
-            this.translate.use(enLang);//Use default
-            //TODO:
-            console.error('Language ' + lang.trim() + ' is not suppoted');
+            console.error('Language ' + lang.trim() + ' is not suppoted yet');
         }
-        setTimeout(() => {
-            window.location.reload();
-        }, 500);
+
+        this.translate.use(selectedLang).subscribe(() => window.location.reload());
     }
 
     //Handle the home action

@@ -86,9 +86,11 @@ NOTARYVERSION=server-0.5.0
 NOTARYSIGNERVERSION=signer-0.5.0
 MARIADBVERSION=mariadb-10.1.10
 HTTPPROXY=
+REBUILDCLARITYFLAG=false
+NEWCLARITYVERSION=
 
 #clarity parameters
-CLARITYIMAGE=danieljt/harbor-clarity-base[:tag]
+CLARITYIMAGE=vmware/harbor-clarity-ui-builder[:tag]
 CLARITYSEEDPATH=/clarity-seed
 CLARITYBUILDSCRIPT=/entrypoint.sh
 
@@ -149,6 +151,7 @@ MAKEFILEPATH_PHOTON=$(MAKEPATH)/photon
 DOCKERFILEPATH_COMMON=$(MAKEPATH)/common
 DOCKERFILEPATH_DB=$(DOCKERFILEPATH_COMMON)/db
 DOCKERFILENAME_DB=Dockerfile
+DOCKERFILE_CLARITY=$(MAKEPATH)/dev/nodeclarity/Dockerfile
 
 # docker image name
 DOCKERIMAGENAME_ADMINSERVER=vmware/harbor-adminserver
@@ -156,6 +159,7 @@ DOCKERIMAGENAME_UI=vmware/harbor-ui
 DOCKERIMAGENAME_JOBSERVICE=vmware/harbor-jobservice
 DOCKERIMAGENAME_LOG=vmware/harbor-log
 DOCKERIMAGENAME_DB=vmware/harbor-db
+DOCKERIMAGENAME_CLATIRY=vmware/harbor-clarity-ui-builder
 
 # docker-compose files
 DOCKERCOMPOSEFILEPATH=$(MAKEPATH)
@@ -266,7 +270,10 @@ modify_composefile:
 modify_sourcefiles:
 	@echo "change mode of source files."
 	@chmod 600 $(MAKEPATH)/common/templates/notary/notary-signer.key
+	@chmod 600 $(MAKEPATH)/common/templates/notary/notary-signer.crt
+	@chmod 600 $(MAKEPATH)/common/templates/notary/notary-signer-ca.crt
 	@chmod 600 $(MAKEPATH)/common/templates/ui/private_key.pem
+	@chmod 600 $(MAKEPATH)/common/templates/registry/root.crt
 	
 install: compile build modify_sourcefiles prepare modify_composefile start
 	
@@ -351,6 +358,24 @@ package_offline: compile build modify_sourcefiles modify_composefile
 
 	@rm -rf $(HARBORPKG)
 	@echo "Done."
+	
+refresh_clarity_builder:
+	@if [ "$(REBUILDCLIATRYFLAG)" = "true" ] ; then \
+		echo "set http proxy.."; \
+		if [ "$(HTTPPROXY)" != "" ] ; then \
+			$(SEDCMD) -i 's/__proxy__/--proxy $(HTTPPROXY)/g' $(DOCKERFILE_CLARITY) ; \
+		else \
+			$(SEDCMD) -i 's/__proxy__/ /g' $(DOCKERFILE_CLARITY) ; \
+		fi ; \
+		echo "build new clarity image.."; \
+		$(DOCKERBUILD) -f $(DOCKERFILE_CLARITY) -t $(DOCKERIMAGENAME_CLATIRY):$(NEWCLARITYVERSION) . ; \
+		echo "push clarity image.."; \
+		$(DOCKERTAG) $(DOCKERIMAGENAME_CLATIRY):$(NEWCLARITYVERSION) $(DOCKERIMAGENAME_CLATIRY):$(NEWCLARITYVERSION); \
+		$(PUSHSCRIPTPATH)/$(PUSHSCRIPTNAME) $(REGISTRYSERVER)$(DOCKERIMAGENAME_CLATIRY):$(NEWCLARITYVERSION) \
+			$(REGISTRYUSER) $(REGISTRYPASSWORD) $(REGISTRYSERVER); \
+		echo "remove local clarity image.."; \
+		$(DOCKERRMIMAGE) $(REGISTRYSERVER)$(DOCKERIMAGENAME_ADMINSERVER):$(NEWCLARITYVERSION); \
+	fi
 
 pushimage:
 	@echo "pushing harbor images ..."

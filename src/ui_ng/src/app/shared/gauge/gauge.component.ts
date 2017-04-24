@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import {
       Component,
       Input,
@@ -24,13 +37,13 @@ const RESOURCE_COLOR_GREY600: string = '#C7D1D6';
 })
 
 export class GaugeComponent implements AfterViewInit {
-      private _backgroundColor: string;
-      private _colorOne: string;
-      private _colorTwo: string;
-      private _size: string = "small"; //Support small, medium, large
-      private _title: string = "UNKNOWN"; //Lang key
-      private _free: number = 0;
-      private _threasHold: number = 0;
+      _backgroundColor: string;
+      _colorOne: string;
+      _colorTwo: string;
+      _size: string = "small"; //Support small, medium, large
+      _title: string = "UNKNOWN"; //Lang key
+      _free: number = 0;
+      _threasHold: number = 0;
 
       /**
        * Background color of the component. Default is white.
@@ -47,7 +60,7 @@ export class GaugeComponent implements AfterViewInit {
             this._backgroundColor = value;
       }
 
-      private _positionOne: number;
+      _positionOne: number;
       /**
        * Keep these two properties
        * Percentage of the total width for the first portion of the bar.
@@ -64,7 +77,7 @@ export class GaugeComponent implements AfterViewInit {
             this.setBars();
       }
 
-      private _positionTwo: number;
+      _positionTwo: number;
       /**
        * Percentage of the total width for the second portion of the bar
        */
@@ -78,7 +91,7 @@ export class GaugeComponent implements AfterViewInit {
             this.setBars();
       }
 
-      private _animate: boolean;
+      _animate: boolean;
       /**
        * Whether to animate transitions in the bars
        */
@@ -157,7 +170,7 @@ export class GaugeComponent implements AfterViewInit {
       @ViewChild('barOne') private barOne: ElementRef;
       @ViewChild('barTwo') private barTwo: ElementRef;
 
-      private determineColors() {
+      determineColors() {
             let percent: number = 0;
             if (this._threasHold !== 0) {
                   let used: number = this._threasHold - this._free;
@@ -187,7 +200,7 @@ export class GaugeComponent implements AfterViewInit {
             this.setAnimate();
       }
 
-      private setBars() {
+      setBars() {
             if (!this.barOne || !this.barTwo) {
                   return;
             }
@@ -225,7 +238,7 @@ export class GaugeComponent implements AfterViewInit {
             });
       }
 
-      private setColors() {
+      setColors() {
             if (!this.barOne || !this.barTwo) {
                   return;
             }
@@ -246,7 +259,7 @@ export class GaugeComponent implements AfterViewInit {
             });
       }
 
-      private setAnimate() {
+      setAnimate() {
             if (!this.barOne || !this.barTwo) {
                   return;
             }

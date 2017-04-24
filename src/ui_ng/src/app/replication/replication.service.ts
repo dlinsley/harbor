@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Injectable } from '@angular/core';
 import { Http, URLSearchParams, Response } from '@angular/http';
 
@@ -87,7 +100,6 @@ export class ReplicationService {
   }
 
   enablePolicy(policyId: number, enabled: number): Observable<any> {
-    console.log('Enable or disable policy ID:' + policyId + ' with activation status:' + enabled);
     return this.http
                .put(`/api/policies/replication/${policyId}/enablement`, {enabled: enabled})
                .map(response=>response.status)
@@ -95,7 +107,6 @@ export class ReplicationService {
   }
 
   deletePolicy(policyId: number): Observable<any> {
-    console.log('Delete policy ID:' + policyId);
     return this.http
                .delete(`/api/policies/replication/${policyId}`)
                .map(response=>response.status)
@@ -139,22 +150,21 @@ export class ReplicationService {
   }
 
   pingTarget(target: Target): Observable<any> {
-    let body = new URLSearchParams();
     if(target.id) {
-      body.set('id', target.id + '');
+      return this.http
+               .post(`/api/targets/${target.id}/ping`, {})
+               .map(response=>response.status)
+               .catch(error=>Observable.throw(error));
     }
-    body.set('endpoint', target.endpoint);
-    body.set('username', target.username);
-    body.set('password', target.password);
     return this.http
-               .post(`/api/targets/ping`, body)
+               .post(`/api/targets/ping`, target)
                .map(response=>response.status)
                .catch(error=>Observable.throw(error));
   }
 
-  updateTarget(target: Target): Observable<any> {
+  updateTarget(target: Target, targetId: number): Observable<any> {
     return this.http
-               .put(`/api/targets/${target.id}`, JSON.stringify(target))
+               .put(`/api/targets/${targetId}`, JSON.stringify(target))
                .map(response=>response.status)
                .catch(error=>Observable.throw(error));
   }

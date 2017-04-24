@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, Output, EventEmitter, ViewChild, AfterViewChecked } from '@angular/core';
 import { NgForm } from '@angular/forms';
 
@@ -44,7 +57,8 @@ export class CreateEditDestinationComponent implements AfterViewChecked {
 
   hasChanged: boolean;
 
-  endpointUrlHasChanged: boolean;
+  endpointHasChanged: boolean;
+  targetNameHasChanged: boolean;
 
   @ViewChild(InlineAlertComponent)
   inlineAlert: InlineAlertComponent;
@@ -63,7 +77,8 @@ export class CreateEditDestinationComponent implements AfterViewChecked {
     this.editable = editable;
 
     this.hasChanged = false;
-    this.endpointUrlHasChanged = false;
+    this.endpointHasChanged = false;
+    this.targetNameHasChanged = false;
 
     this.pingTestMessage = '';
     this.pingStatus = true;
@@ -96,22 +111,17 @@ export class CreateEditDestinationComponent implements AfterViewChecked {
     this.pingStatus = true;
     this.testOngoing = !this.testOngoing;
 
-    let postedTarget: any = {};
-
-    if(!this.endpointUrlHasChanged) {
-       postedTarget = {
-         id: this.target.id
-       };
+    let payload: Target = new Target();
+    if(this.endpointHasChanged) {
+      payload.endpoint = this.target.endpoint;
+      payload.username = this.target.username;
+      payload.password = this.target.password;
     } else {
-      postedTarget = {
-        endpoint: this.target.endpoint,
-        username: this.target.username,
-        password: this.target.password
-      };
+      payload.id = this.target.id;
     }
 
     this.replicationService
-        .pingTarget(postedTarget)
+        .pingTarget(payload)
         .subscribe(
           response=>{
             this.pingStatus = true;
@@ -126,10 +136,16 @@ export class CreateEditDestinationComponent implements AfterViewChecked {
         )
   }
 
+  changedTargetName($event: any) {
+    if(this.editable) {
+      this.targetNameHasChanged = true;
+    }
+  }
+
   clearPassword($event: any) {
     if(this.editable) {
       this.target.password = '';
-      this.endpointUrlHasChanged = true;
+      this.endpointHasChanged = true;
     }
   }
 
@@ -141,7 +157,6 @@ export class CreateEditDestinationComponent implements AfterViewChecked {
           .subscribe(
             response=>{
               this.messageHandlerService.showSuccess('DESTINATION.CREATED_SUCCESS');
-              console.log('Successful added target.');
               this.createEditDestinationOpened = false;
               this.reload.emit(true);
             },
@@ -172,16 +187,24 @@ export class CreateEditDestinationComponent implements AfterViewChecked {
           );
         break;
     case ActionType.EDIT:
-      if(!this.endpointUrlHasChanged) {
+      if(!(this.targetNameHasChanged || this.endpointHasChanged)) {
         this.createEditDestinationOpened = false;
         return;
       } 
+      let payload: Target = new Target();
+      if(this.targetNameHasChanged) {
+        payload.name = this.target.name;
+      }
+      if (this.endpointHasChanged) {
+        payload.endpoint = this.target.endpoint;
+        payload.username = this.target.username;
+        payload.password = this.target.password;
+      } 
       this.replicationService
-          .updateTarget(this.target)
+          .updateTarget(payload, this.target.id)
           .subscribe(
             response=>{ 
               this.messageHandlerService.showSuccess('DESTINATION.UPDATED_SUCCESS');
-              console.log('Successful updated target.');
               this.createEditDestinationOpened = false;
               this.reload.emit(true);
             },

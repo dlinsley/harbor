@@ -1,3 +1,16 @@
+// Copyright (c) 2017 VMware, Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
@@ -5,11 +18,8 @@ import { CreateEditPolicyComponent } from '../shared/create-edit-policy/create-e
 
 import { MessageHandlerService } from '../shared/message-handler/message-handler.service';
 
-import { SessionService } from '../shared/session.service';
-
 import { ReplicationService } from './replication.service';
 
-import { SessionUser } from '../shared/session-user';
 import { Policy } from './policy';
 import { Job } from './job';
 import { Target } from './target';
@@ -52,8 +62,7 @@ class SearchOption {
   styleUrls: ['./replication.component.css']
 })
 export class ReplicationComponent implements OnInit {
-   
-   currentUser: SessionUser;
+    
    projectId: number;
 
    search: SearchOption;
@@ -81,11 +90,9 @@ export class ReplicationComponent implements OnInit {
    createEditPolicyComponent: CreateEditPolicyComponent;
 
    constructor(
-     private sessionService: SessionService, 
      private messageHandlerService: MessageHandlerService,
      private replicationService: ReplicationService,
-     private route: ActivatedRoute) {
-     this.currentUser = this.sessionService.getCurrentUser();
+     private route: ActivatedRoute) { 
    }
 
    ngOnInit(): void {
@@ -107,7 +114,7 @@ export class ReplicationComponent implements OnInit {
          .listPolicies(this.search.policyName, this.projectId)
          .subscribe(
            response=>{
-             this.changedPolicies = response;
+             this.changedPolicies = response || [];
              if(this.changedPolicies && this.changedPolicies.length > 0) {
                this.initSelectedId = this.changedPolicies[0].id;
              }
@@ -115,8 +122,6 @@ export class ReplicationComponent implements OnInit {
              if(this.changedPolicies && this.changedPolicies.length > 0) {
                this.search.policyId = this.changedPolicies[0].id;
                this.fetchPolicyJobs();
-             } else {
-               this.changedJobs = [];
              }
            },
            error=>this.messageHandlerService.handleError(error)
@@ -156,7 +161,7 @@ export class ReplicationComponent implements OnInit {
                  this.messageHandlerService.showError('REPLICATION.FOUND_ERROR_IN_JOBS', '');
                  break;
                }
-             }
+             }     
            },
            error=>this.messageHandlerService.handleError(error)
          );

@@ -44,6 +44,9 @@ Otherwise, if you use IP address to connect your registry host, CN can be anythi
     -CAcreateserial -extfile extfile.cnf -out yourdomain.com.crt
    ```
 
+  openssl x509 -req -days 365 -in yourdomain.com.csr -CA ca.crt -CAkey ca.key -CAcreateserial -extfile extfile.cnf -out yourdomain.com
+.crt
+```
 ## Configuration and Installation
 After obtaining the **yourdomain.com.crt** and **yourdomain.com.key** files, 
 you can put them into directory such as ```/root/cert/```:
@@ -98,6 +101,15 @@ If you mapped nginx port 443 to another port, then you should instead create the
    ```sh
    docker login reg.yourdomain.com:port
    ```
+
+```
+  docker login reg.yourdomain.com
+```
+If you've mapped nginx 443 port to another, you need to add the port to login, like below:
+
+```
+  docker login reg.yourdomain.com:port
+```
 
 ## Troubleshooting
 1. You may get an intermediate certificate from a certificate issuer. In this case, you should merge the intermediate certificate with your own certificate to create a certificate bundle. You can achieve this by the below command:  
