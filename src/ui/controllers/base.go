@@ -71,6 +71,7 @@ func (cc *CommonController) Login() {
 
 	cc.SetSession("userId", user.UserID)
 	cc.SetSession("username", user.Username)
+	cc.SetSession("isSysAdmin", user.HasAdminRole == 1)
 }
 
 // LogOut Habor UI
@@ -170,7 +171,8 @@ func (cc *CommonController) SendEmail() {
 		settings.Username,
 		settings.Password,
 		60, settings.SSL,
-		false, settings.From,
+		settings.Insecure,
+		settings.From,
 		[]string{email},
 		"Reset Harbor user password",
 		message.String())

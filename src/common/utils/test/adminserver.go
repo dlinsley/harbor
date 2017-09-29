@@ -50,6 +50,7 @@ var adminServerDefaultConfig = map[string]interface{}{
 	common.EmailPassword:              "password",
 	common.EmailFrom:                  "from",
 	common.EmailSSL:                   true,
+	common.EmailInsecure:              false,
 	common.EmailIdentity:              "",
 	common.ProjectCreationRestriction: common.ProCrtRestrAdmOnly,
 	common.VerifyRemoteCert:           false,
@@ -59,6 +60,7 @@ var adminServerDefaultConfig = map[string]interface{}{
 	common.AdminInitialPassword:       "password",
 	common.AdmiralEndpoint:            "http://www.vmware.com",
 	common.WithNotary:                 false,
+	common.WithClair:                  false,
 }
 
 // NewAdminserver returns a mock admin server
@@ -128,4 +130,9 @@ func NewCapacityHandle() (func(http.ResponseWriter, *http.Request), error) {
 		Body:       b,
 	}
 	return Handler(resp), nil
+}
+
+// GetDefaultConfigMap returns the defailt config map for easier modification.
+func GetDefaultConfigMap() map[string]interface{} {
+	return adminServerDefaultConfig
 }

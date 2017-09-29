@@ -23,12 +23,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vmware/harbor/src/common/dao"
-	"github.com/vmware/harbor/src/common/utils/log"
-	"github.com/vmware/harbor/src/ui/config"
-
 	"github.com/docker/distribution/registry/auth/token"
 	"github.com/docker/libtrust"
+	"github.com/vmware/harbor/src/common/models"
+	"github.com/vmware/harbor/src/common/security"
+	"github.com/vmware/harbor/src/common/utils/log"
+	"github.com/vmware/harbor/src/ui/config"
+	"github.com/vmware/harbor/src/ui/promgr"
 )
 
 const (
@@ -52,16 +53,21 @@ func GetResourceActions(scopes []string) []*token.ResourceActions {
 		items := strings.Split(s, ":")
 		length := len(items)
 
-		typee := items[0]
-
+		typee := ""
 		name := ""
-		if length > 1 {
-			name = items[1]
-		}
-
 		actions := []string{}
-		if length > 2 {
-			actions = strings.Split(items[2], ",")
+
+		if length == 1 {
+			typee = items[0]
+		} else if length == 2 {
+			typee = items[0]
+			name = items[1]
+		} else {
+			typee = items[0]
+			name = strings.Join(items[1:length-1], ":")
+			if len(items[length-1]) > 0 {
+				actions = strings.Split(items[length-1], ",")
+			}
 		}
 
 		res = append(res, &token.ResourceActions{
@@ -74,7 +80,8 @@ func GetResourceActions(scopes []string) []*token.ResourceActions {
 }
 
 //filterAccess iterate a list of resource actions and try to use the filter that matches the resource type to filter the actions.
-func filterAccess(access []*token.ResourceActions, u userInfo, filters map[string]accessFilter) error {
+func filterAccess(access []*token.ResourceActions, ctx security.Context,
+	pm promgr.ProjectManager, filters map[string]accessFilter) error {
 	var err error
 	for _, a := range access {
 		f, ok := filters[a.Type]
@@ -83,8 +90,8 @@ func filterAccess(access []*token.ResourceActions, u userInfo, filters map[strin
 			log.Warningf("No filter found for access type: %s, skip filter, the access of resource '%s' will be set empty.", a.Type, a.Name)
 			continue
 		}
-		err = f.filter(u, a)
-		log.Debugf("user: %s, access: %v", u.name, a)
+		err = f.filter(ctx, pm, a)
+		log.Debugf("user: %s, access: %v", ctx.GetUsername(), a)
 		if err != nil {
 			return err
 		}
@@ -92,65 +99,27 @@ func filterAccess(access []*token.ResourceActions, u userInfo, filters map[strin
 	return nil
 }
 
-//RegistryTokenForUI calls genTokenForUI to get raw token for registry
-func RegistryTokenForUI(username string, service string, scopes []string) (string, int, *time.Time, error) {
-	return genTokenForUI(username, service, scopes, registryFilterMap)
-}
-
-//NotaryTokenForUI calls genTokenForUI to get raw token for notary
-func NotaryTokenForUI(username string, service string, scopes []string) (string, int, *time.Time, error) {
-	return genTokenForUI(username, service, scopes, notaryFilterMap)
-}
-
-// genTokenForUI is for the UI process to call, so it won't establish a https connection from UI to proxy.
-func genTokenForUI(username string, service string, scopes []string, filters map[string]accessFilter) (string, int, *time.Time, error) {
-	isAdmin, err := dao.IsAdminRole(username)
-	if err != nil {
-		return "", 0, nil, err
-	}
-	u := userInfo{
-		name:    username,
-		allPerm: isAdmin,
-	}
-	access := GetResourceActions(scopes)
-	err = filterAccess(access, u, filters)
-	if err != nil {
-		return "", 0, nil, err
-	}
-	return MakeRawToken(username, service, access)
-}
-
-// MakeRawToken makes a valid jwt token based on parms.
-func MakeRawToken(username, service string, access []*token.ResourceActions) (token string, expiresIn int, issuedAt *time.Time, err error) {
+// MakeToken makes a valid jwt token based on parms.
+func MakeToken(username, service string, access []*token.ResourceActions) (*models.Token, error) {
 	pk, err := libtrust.LoadKeyFile(privateKey)
 	if err != nil {
-		return "", 0, nil, err
+		return nil, err
 	}
 	expiration, err := config.TokenExpiration()
 	if err != nil {
-		return "", 0, nil, err
+		return nil, err
 	}
 
 	tk, expiresIn, issuedAt, err := makeTokenCore(issuer, username, service, expiration, access, pk)
 	if err != nil {
-		return "", 0, nil, err
-	}
-	rs := fmt.Sprintf("%s.%s", tk.Raw, base64UrlEncode(tk.Signature))
-	return rs, expiresIn, issuedAt, nil
-}
-
-type tokenJSON struct {
-	Token     string `json:"token"`
-	ExpiresIn int    `json:"expires_in"`
-	IssuedAt  string `json:"issued_at"`
-}
-
-func makeToken(username, service string, access []*token.ResourceActions) (*tokenJSON, error) {
-	raw, expires, issued, err := MakeRawToken(username, service, access)
-	if err != nil {
 		return nil, err
 	}
-	return &tokenJSON{raw, expires, issued.Format(time.RFC3339)}, nil
+	rs := fmt.Sprintf("%s.%s", tk.Raw, base64UrlEncode(tk.Signature))
+	return &models.Token{
+		Token:     rs,
+		ExpiresIn: expiresIn,
+		IssuedAt:  issuedAt.Format(time.RFC3339),
+	}, nil
 }
 
 func permToActions(p string) []string {

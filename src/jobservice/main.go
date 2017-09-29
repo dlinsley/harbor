@@ -42,7 +42,9 @@ func main() {
 	}
 
 	initRouters()
-	job.InitWorkerPool()
+	if err := job.InitWorkerPools(); err != nil {
+		log.Fatalf("Failed to initialize worker pools, error: %v", err)
+	}
 	go job.Dispatch()
 	resumeJobs()
 	beego.Run()
@@ -54,14 +56,25 @@ func resumeJobs() {
 	if err != nil {
 		log.Warningf("Failed to reset all running jobs to pending, error: %v", err)
 	}
-	jobs, err := dao.GetRepJobByStatus(models.JobPending, models.JobRetrying)
+	rjobs, err := dao.GetRepJobByStatus(models.JobPending, models.JobRetrying, models.JobRunning)
 	if err == nil {
-		for _, j := range jobs {
-			log.Debugf("Resuming job: %d", j.ID)
-			job.Schedule(j.ID)
+		for _, j := range rjobs {
+			rj := job.NewRepJob(j.ID)
+			log.Debugf("Resuming replication job: %v", rj)
+			job.Schedule(rj)
 		}
 	} else {
-		log.Warningf("Failed to jobs to resume, error: %v", err)
+		log.Warningf("Failed to resume replication jobs, error: %v", err)
+	}
+	sjobs, err := dao.GetScanJobsByStatus(models.JobPending, models.JobRetrying, models.JobRunning)
+	if err == nil {
+		for _, j := range sjobs {
+			sj := job.NewScanJob(j.ID)
+			log.Debugf("Resuming scan job: %v", sj)
+			job.Schedule(sj)
+		}
+	} else {
+		log.Warningf("Failed to resume scan jobs, error: %v", err)
 	}
 }
 
@@ -69,6 +82,8 @@ func init() {
 	configPath := os.Getenv("CONFIG_PATH")
 	if len(configPath) != 0 {
 		log.Infof("Config path: %s", configPath)
-		beego.LoadAppConfig("ini", configPath)
+		if err := beego.LoadAppConfig("ini", configPath); err != nil {
+			log.Fatalf("Failed to load config file: %s, error: %v", configPath, err)
+		}
 	}
 }

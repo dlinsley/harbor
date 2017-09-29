@@ -7,9 +7,15 @@
   background-color: #fafafa;
 }
 
+.subnav .nav {
+  padding-left: 0;
+}
+
 .role-label {
   color: #CCCCCC;
   font-size: 14px;
   font-style: italic;
   letter-spacing: 0.01em;
 }
+.cursor{
+  cursor: pointer;}

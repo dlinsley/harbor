@@ -43,11 +43,11 @@ create table user (
 # The mark of deleted user is "#user_id".
 # The 11 consist of 10 for the max value of user_id(4294967295)  
 # in MySQL and 1 of '#'.
- username varchar(32),
+ username varchar(255),
 # 11 bytes is reserved for marking the deleted users.
  email varchar(255),
  password varchar(40) NOT NULL,
- realname varchar (20) NOT NULL,
+ realname varchar (255) NOT NULL,
  comment varchar (30),
  deleted tinyint (1) DEFAULT 0 NOT NULL,
  reset_uuid varchar(40) DEFAULT NULL,
@@ -97,9 +97,23 @@ create table project_member (
 insert into project_member (project_id, user_id, role, creation_time, update_time) values
 (1, 1, 1, NOW(), NOW());
 
+create table project_metadata (
+ project_id int NOT NULL,
+ name varchar(255) NOT NULL,
+ value varchar(255),
+ creation_time timestamp default CURRENT_TIMESTAMP,
+ update_time timestamp default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
+ deleted tinyint (1) DEFAULT 0 NOT NULL,
+ PRIMARY KEY (project_id, name),
+ FOREIGN KEY (project_id) REFERENCES project(project_id)
+);
+
+insert into project_metadata (project_id, name, value, creation_time, update_time, deleted) values
+(1, 'public', 'true', NOW(), NOW(), 0);
+
 create table access_log (
  log_id int NOT NULL AUTO_INCREMENT,
- user_id int NOT NULL,
+ username varchar (255) NOT NULL,
  project_id int NOT NULL,
  repo_name varchar (256), 
  repo_tag varchar (128),
@@ -107,16 +121,13 @@ create table access_log (
  operation varchar(20) NOT NULL,
  op_time timestamp,
  primary key (log_id),
- INDEX pid_optime (project_id, op_time),
- FOREIGN KEY (user_id) REFERENCES user(user_id),
- FOREIGN KEY (project_id) REFERENCES project (project_id)
+ INDEX pid_optime (project_id, op_time)
 );
 
 create table repository (
  repository_id int NOT NULL AUTO_INCREMENT,
  name varchar(255) NOT NULL,
  project_id int NOT NULL,
- owner_id int NOT NULL,
  description text,
  pull_count int DEFAULT 0 NOT NULL,
  star_count int DEFAULT 0 NOT NULL,
@@ -145,7 +156,7 @@ create table replication_target (
  id int NOT NULL AUTO_INCREMENT,
  name varchar(64),
  url varchar(64),
- username varchar(40),
+ username varchar(255),
  password varchar(128),
  /*
  target_type indicates the type of target registry,
@@ -172,6 +183,41 @@ create table replication_job (
  INDEX poid_uptime (policy_id, update_time)
  );
  
+create table img_scan_job (
+ id int NOT NULL AUTO_INCREMENT,
+ status varchar(64) NOT NULL,
+ repository varchar(256) NOT NULL,
+ tag   varchar(128) NOT NULL,
+ digest varchar(128),
+ creation_time timestamp default CURRENT_TIMESTAMP,
+ update_time timestamp default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
+ PRIMARY KEY (id)
+ );
+
+create table img_scan_overview (
+ id int NOT NULL AUTO_INCREMENT,
+ image_digest varchar(128) NOT NULL,
+ scan_job_id int NOT NULL,
+ /* 0 indicates none, the higher the number, the more severe the status */
+ severity int NOT NULL default 0,
+ /* the json string to store components severity status, currently use a json to be more flexible and avoid creating additional tables. */
+ components_overview varchar(2048),
+ /* primary key for querying details, in clair it should be the name of the "top layer" */
+ details_key varchar(128),
+ creation_time timestamp default CURRENT_TIMESTAMP,
+ update_time timestamp default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
+ PRIMARY KEY(id),
+ UNIQUE(image_digest)
+ );
+
+create table clair_vuln_timestamp (
+id int NOT NULL AUTO_INCREMENT, 
+namespace varchar(128) NOT NULL,
+last_update timestamp NOT NULL,
+PRIMARY KEY(id),
+UNIQUE(namespace)
+);
+
 create table properties (
  k varchar(64) NOT NULL,
  v varchar(128) NOT NULL,
@@ -182,4 +228,4 @@ CREATE TABLE IF NOT EXISTS `alembic_version` (
     `version_num` varchar(32) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-insert into alembic_version values ('0.4.0');
+insert into alembic_version values ('1.2.0');

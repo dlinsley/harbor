@@ -90,6 +90,7 @@ After setting up HTTPS for Harbor, you can verify it by the following steps:
 
 1. Open a browser and enter the address: https://reg.yourdomain.com . It should display the user interface of Harbor.
 
+<<<<<<< HEAD
 2. On a machine with Docker daemon, make sure the option "-insecure-registry" does not present, and you must copy ca.crt generated in the above step to /etc/docker/certs.d/yourdomain.com(or your registry host IP), if the directory does not exist, create it.
 If you mapped nginx port 443 to another port, then you should instead create the directory /etc/docker/certs.d/yourdomain.com:port(or your registry host IP:port). Then run any docker command to verify the setup, e.g. 
    
@@ -101,6 +102,10 @@ If you mapped nginx port 443 to another port, then you should instead create the
    ```sh
    docker login reg.yourdomain.com:port
    ```
+=======
+2. On a machine with Docker daemon, make sure the option "-insecure-registry" does not present, and you must copy ca.crt generated in the above step to /etc/docker/certs.d/reg.yourdomain.com(or your registry host IP), if the directory does not exist, create it.
+If you mapped nginx port 443 to another port, then you should instead create the directory /etc/docker/certs.d/reg.yourdomain.com:port(or your registry host IP:port). Then run any docker command to verify the setup, e.g. 
+>>>>>>> upstream/master
 
 ```
   docker login reg.yourdomain.com
