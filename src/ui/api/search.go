@@ -99,13 +99,15 @@ func (s *SearchAPI) Get() {
 			}
 		}
 
-		repos, err := dao.GetRepositoryByProjectName(p.Name)
+		total, err := dao.GetTotalOfRepositories(&models.RepositoryQuery{
+			ProjectIDs: []int64{p.ProjectID},
+		})
 		if err != nil {
-			log.Errorf("failed to get repositories of project %s: %v", p.Name, err)
+			log.Errorf("failed to get total of repositories of project %d: %v", p.ProjectID, err)
 			s.CustomAbort(http.StatusInternalServerError, "")
 		}
 
-		p.RepoCount = len(repos)
+		p.RepoCount = total
 
 		projectResult = append(projectResult, p)
 	}
@@ -124,7 +126,7 @@ func (s *SearchAPI) Get() {
 func filterRepositories(projects []*models.Project, keyword string) (
 	[]map[string]interface{}, error) {
 
-	repositories, err := dao.GetAllRepositories()
+	repositories, err := dao.GetRepositories()
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +149,7 @@ func filterRepositories(projects []*models.Project, keyword string) (
 			entry["repository_name"] = r.Name
 			entry["project_name"] = projects[j].Name
 			entry["project_id"] = projects[j].ProjectID
-			entry["project_public"] = projects[j].Public
+			entry["project_public"] = projects[j].IsPublic()
 			entry["pull_count"] = r.PullCount
 
 			tags, err := getTags(r.Name)

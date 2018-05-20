@@ -6,12 +6,13 @@ services:
     restart: always
     volumes:
       - /var/log/harbor/:/var/log/docker/:z
+      - ./common/config/log/:/etc/logrotate.d/:z
     ports:
-      - 127.0.0.1:1514:514
+      - 127.0.0.1:1514:10514
     networks:
       - harbor
   registry:
-    image: vmware/registry:2.6.2-photon
+    image: vmware/registry-photon:__reg_version__
     container_name: registry
     restart: always
     volumes:
@@ -30,12 +31,12 @@ services:
       options:  
         syslog-address: "tcp://127.0.0.1:1514"
         tag: "registry"
-  mysql:
+  postgresql:
     image: vmware/harbor-db:__version__
     container_name: harbor-db
     restart: always
     volumes:
-      - /data/database:/var/lib/mysql:z
+      - /data/database:/var/lib/postgresql/data:z
     networks:
       - harbor
     env_file:
@@ -46,7 +47,7 @@ services:
       driver: "syslog"
       options:  
         syslog-address: "tcp://127.0.0.1:1514"
-        tag: "mysql"
+        tag: "postgresql"
   adminserver:
     image: vmware/harbor-adminserver:__version__
     container_name: harbor-adminserver
@@ -75,6 +76,7 @@ services:
     volumes:
       - ./common/config/ui/app.conf:/etc/ui/app.conf:z
       - ./common/config/ui/private_key.pem:/etc/ui/private_key.pem:z
+      - ./common/config/ui/certificates/:/etc/ui/certificates/:z
       - /data/secretkey:/etc/ui/key:z
       - /data/ca_download/:/etc/ui/ca/:z
       - /data/psc/:/etc/ui/token/:z
@@ -97,11 +99,11 @@ services:
     restart: always
     volumes:
       - /data/job_logs:/var/log/jobs:z
-      - ./common/config/jobservice/app.conf:/etc/jobservice/app.conf:z
-      - /data/secretkey:/etc/jobservice/key:z
+      - ./common/config/jobservice/config.yml:/etc/jobservice/config.yml:z
     networks:
       - harbor
     depends_on:
+      - redis
       - ui
       - adminserver
     logging:
@@ -109,8 +111,23 @@ services:
       options:  
         syslog-address: "tcp://127.0.0.1:1514"
         tag: "jobservice"
+  redis:
+    image: vmware/redis-photon:__redis_version__
+    container_name: redis
+    restart: always
+    volumes:
+      - /data/redis:/data
+    networks:
+      - harbor
+    depends_on:
+      - log
+    logging:
+      driver: "syslog"
+      options:  
+        syslog-address: "tcp://127.0.0.1:1514"
+        tag: "redis"
   proxy:
-    image: vmware/nginx-photon:1.11.13
+    image: vmware/nginx-photon:__nginx_version__
     container_name: nginx
     restart: always
     volumes:
@@ -122,7 +139,7 @@ services:
       - 443:443
       - 4443:4443
     depends_on:
-      - mysql
+      - postgresql
       - registry
       - ui
       - log

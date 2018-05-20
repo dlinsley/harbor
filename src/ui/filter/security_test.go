@@ -16,7 +16,6 @@ package filter
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -31,6 +30,8 @@ import (
 	"github.com/astaxie/beego/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/vmware/harbor/src/common/dao"
+	"github.com/vmware/harbor/src/common/models"
+	commonsecret "github.com/vmware/harbor/src/common/secret"
 	"github.com/vmware/harbor/src/common/security"
 	"github.com/vmware/harbor/src/common/security/local"
 	"github.com/vmware/harbor/src/common/security/secret"
@@ -43,21 +44,18 @@ import (
 
 func TestMain(m *testing.M) {
 	// initialize beego session manager
-	conf := map[string]interface{}{
-		"cookieName":      beego.BConfig.WebConfig.Session.SessionName,
-		"gclifetime":      beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
-		"providerConfig":  filepath.ToSlash(beego.BConfig.WebConfig.Session.SessionProviderConfig),
-		"secure":          beego.BConfig.Listen.EnableHTTPS,
-		"enableSetCookie": beego.BConfig.WebConfig.Session.SessionAutoSetCookie,
-		"domain":          beego.BConfig.WebConfig.Session.SessionDomain,
-		"cookieLifeTime":  beego.BConfig.WebConfig.Session.SessionCookieLifeTime,
-	}
-	confBytes, err := json.Marshal(conf)
-	if err != nil {
-		log.Fatalf("failed to marshal session conf: %v", err)
+	conf := &session.ManagerConfig{
+		CookieName:      beego.BConfig.WebConfig.Session.SessionName,
+		Gclifetime:      beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
+		ProviderConfig:  filepath.ToSlash(beego.BConfig.WebConfig.Session.SessionProviderConfig),
+		Secure:          beego.BConfig.Listen.EnableHTTPS,
+		EnableSetCookie: beego.BConfig.WebConfig.Session.SessionAutoSetCookie,
+		Domain:          beego.BConfig.WebConfig.Session.SessionDomain,
+		CookieLifeTime:  beego.BConfig.WebConfig.Session.SessionCookieLifeTime,
 	}
 
-	beego.GlobalSessions, err = session.NewManager("memory", string(confBytes))
+	var err error
+	beego.GlobalSessions, err = session.NewManager("memory", conf)
 	if err != nil {
 		log.Fatalf("failed to create session manager: %v", err)
 	}
@@ -110,11 +108,7 @@ func TestSecretReqCtxModifier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create request: %v", req)
 	}
-	req.AddCookie(&http.Cookie{
-		Name:  "secret",
-		Value: "secret",
-	})
-
+	commonsecret.AddToRequest(req, "secret")
 	ctx, err := newContext(req)
 	if err != nil {
 		t.Fatalf("failed to crate context: %v", err)
@@ -153,6 +147,12 @@ func TestBasicAuthReqCtxModifier(t *testing.T) {
 }
 
 func TestSessionReqCtxModifier(t *testing.T) {
+	user := models.User{
+		Username:     "admin",
+		UserID:       1,
+		Email:        "admin@example.com",
+		HasAdminRole: true,
+	}
 	req, err := http.NewRequest(http.MethodGet,
 		"http://127.0.0.1/api/projects/", nil)
 	if err != nil {
@@ -162,10 +162,7 @@ func TestSessionReqCtxModifier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create session store: %v", err)
 	}
-	if err = store.Set("username", "admin"); err != nil {
-		t.Fatalf("failed to set session: %v", err)
-	}
-	if err = store.Set("isSysAdmin", true); err != nil {
+	if err = store.Set("user", user); err != nil {
 		t.Fatalf("failed to set session: %v", err)
 	}
 
@@ -191,6 +188,41 @@ func TestSessionReqCtxModifier(t *testing.T) {
 	assert.Equal(t, "admin", s.GetUsername())
 	assert.True(t, s.IsSysAdmin())
 	assert.NotNil(t, projectManager(ctx))
+
+}
+
+func TestSessionReqCtxModifierFailed(t *testing.T) {
+	user := "admin"
+	req, err := http.NewRequest(http.MethodGet,
+		"http://127.0.0.1/api/projects/", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", req)
+	}
+	store, err := beego.GlobalSessions.SessionStart(httptest.NewRecorder(), req)
+	if err != nil {
+		t.Fatalf("failed to create session store: %v", err)
+	}
+	if err = store.Set("user", user); err != nil {
+		t.Fatalf("failed to set session: %v", err)
+	}
+
+	req, err = http.NewRequest(http.MethodGet,
+		"http://127.0.0.1/api/projects/", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", req)
+	}
+	addSessionIDToCookie(req, store.SessionID())
+
+	ctx, err := newContext(req)
+	if err != nil {
+		t.Fatalf("failed to crate context: %v", err)
+	}
+
+	modifier := &sessionReqCtxModifier{}
+	modified := modifier.Modify(ctx)
+
+	assert.False(t, modified)
+
 }
 
 // TODO add test case

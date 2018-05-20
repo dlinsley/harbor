@@ -18,57 +18,72 @@ import {
   Input,
   Output,
   EventEmitter,
-  ChangeDetectionStrategy,
   ChangeDetectorRef,
-  ElementRef
-} from '@angular/core';
+  ElementRef, AfterViewInit
+} from "@angular/core";
+import {Subject} from "rxjs/Subject";
+import {Observable} from "rxjs/Observable";
+import "rxjs/add/observable/forkJoin";
+import { TranslateService } from "@ngx-translate/core";
+import { State, Comparator } from "clarity-angular";
 
-import { TagService, VulnerabilitySeverity } from '../service/index';
-import { ErrorHandler } from '../error-handler/error-handler';
-import { ChannelService } from '../channel/index';
+import { TagService, VulnerabilitySeverity, RequestQueryParams } from "../service/index";
+import { ErrorHandler } from "../error-handler/error-handler";
+import { ChannelService } from "../channel/index";
 import {
   ConfirmationTargets,
   ConfirmationState,
   ConfirmationButtons
-} from '../shared/shared.const';
+} from "../shared/shared.const";
 
-import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
-import { ConfirmationMessage } from '../confirmation-dialog/confirmation-message';
-import { ConfirmationAcknowledgement } from '../confirmation-dialog/confirmation-state-message';
+import { ConfirmationDialogComponent } from "../confirmation-dialog/confirmation-dialog.component";
+import { ConfirmationMessage } from "../confirmation-dialog/confirmation-message";
+import { ConfirmationAcknowledgement } from "../confirmation-dialog/confirmation-state-message";
 
-import { Tag, TagClickEvent } from '../service/interface';
-
-import { TAG_TEMPLATE } from './tag.component.html';
-import { TAG_STYLE } from './tag.component.css';
+import {Label, Tag, TagClickEvent} from "../service/interface";
 
 import {
   toPromise,
   CustomComparator,
-  VULNERABILITY_SCAN_STATUS
-} from '../utils';
+  calculatePage,
+  doFiltering,
+  doSorting,
+  VULNERABILITY_SCAN_STATUS,
+  DEFAULT_PAGE_SIZE,
+  clone,
+} from "../utils";
 
-import { TranslateService } from '@ngx-translate/core';
 
-import { State, Comparator } from 'clarity-angular';
+import {CopyInputComponent} from "../push-image/copy-input.component";
+import {BatchInfo, BathInfoChanges} from "../confirmation-dialog/confirmation-batch-message";
+
+import {LabelService} from "../service/label.service";
+
+export interface LabelState {
+  iconsShow: boolean;
+  label: Label;
+  show: boolean;
+}
 
 @Component({
   selector: 'hbr-tag',
-  template: TAG_TEMPLATE,
-  styles: [TAG_STYLE],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  templateUrl: './tag.component.html',
+  styleUrls: ['./tag.component.scss']
 })
-export class TagComponent implements OnInit {
+export class TagComponent implements OnInit, AfterViewInit {
 
+  signedCon: {[key: string]: any | string[]} = {};
   @Input() projectId: number;
   @Input() repoName: string;
   @Input() isEmbedded: boolean;
 
   @Input() hasSignedIn: boolean;
   @Input() hasProjectAdminRole: boolean;
+  @Input() isGuest: boolean;
   @Input() registryUrl: string;
   @Input() withNotary: boolean;
   @Input() withClair: boolean;
-
+  @Input() withAdmiral: boolean;
   @Output() refreshRepo = new EventEmitter<boolean>();
   @Output() tagClickEvent = new EventEmitter<TagClickEvent>();
   @Output() signatureOutput = new EventEmitter<any>();
@@ -79,60 +94,418 @@ export class TagComponent implements OnInit {
   showTagManifestOpened: boolean;
   manifestInfoTitle: string;
   digestId: string;
-  staticBackdrop: boolean = true;
-  closable: boolean = false;
+  staticBackdrop = true;
+  closable = false;
+  lastFilteredTagName: string;
+  batchDelectionInfos: BatchInfo[] = [];
+  inprogress: boolean;
+  openLabelFilterPanel: boolean;
+  openLabelFilterPiece: boolean;
 
-  createdComparator: Comparator<Tag> = new CustomComparator<Tag>('created', 'date');
+  createdComparator: Comparator<Tag> = new CustomComparator<Tag>("created", "date");
 
-  loading: boolean = false;
-  copyFailed: boolean = false;
+  loading = false;
+  copyFailed = false;
+  selectedRow: Tag[] = [];
+
+  imageLabels: LabelState[] = [];
+  imageStickLabels: LabelState[] = [];
+  imageFilterLabels: LabelState[] = [];
+
+  labelListOpen = false;
+  selectedTag: Tag[];
+  labelNameFilter: Subject<string> = new Subject<string> ();
+  stickLabelNameFilter: Subject<string> = new Subject<string> ();
+  filterOnGoing: boolean;
+  stickName = '';
+  filterName = '';
+  initFilter = {
+    name: '',
+    description: '',
+    color: '',
+    scope: '',
+    project_id: 0,
+  };
+  filterOneLabel: Label = this.initFilter;
+
 
   @ViewChild('confirmationDialog')
   confirmationDialog: ConfirmationDialogComponent;
 
-  @ViewChild('digestTarget') textInput: ElementRef;
+  @ViewChild("digestTarget") textInput: ElementRef;
+  @ViewChild("copyInput") copyInput: CopyInputComponent;
+
+  pageSize: number = DEFAULT_PAGE_SIZE;
+  currentPage = 1;
+  totalCount = 0;
+  currentState: State;
 
   constructor(
     private errorHandler: ErrorHandler,
     private tagService: TagService,
+    private labelService: LabelService,
     private translateService: TranslateService,
     private ref: ChangeDetectorRef,
     private channel: ChannelService
   ) { }
 
-  confirmDeletion(message: ConfirmationAcknowledgement) {
-    if (message &&
-      message.source === ConfirmationTargets.TAG
-      && message.state === ConfirmationState.CONFIRMED) {
-      let tag: Tag = message.data;
-      if (tag) {
-        if (tag.signature) {
-          return;
-        } else {
-          toPromise<number>(this.tagService
-            .deleteTag(this.repoName, tag.name))
-            .then(
-            response => {
-              this.retrieve();
-              this.translateService.get('REPOSITORY.DELETED_TAG_SUCCESS')
-                .subscribe(res => this.errorHandler.info(res));
-            }).catch(error => this.errorHandler.error(error));
-        }
-      }
-    }
-  }
-
   ngOnInit() {
     if (!this.projectId) {
-      this.errorHandler.error('Project ID cannot be unset.');
+      this.errorHandler.error("Project ID cannot be unset.");
       return;
     }
     if (!this.repoName) {
-      this.errorHandler.error('Repo name cannot be unset.');
+      this.errorHandler.error("Repo name cannot be unset.");
       return;
     }
 
     this.retrieve();
+    this.lastFilteredTagName = '';
+
+    this.labelNameFilter
+        .debounceTime(500)
+        .distinctUntilChanged()
+        .subscribe((name: string) => {
+          if (this.filterName.length) {
+            this.filterOnGoing = true;
+
+            this.imageFilterLabels.forEach(data => {
+              if (data.label.name.indexOf(this.filterName) !== -1) {
+                data.show = true;
+              } else {
+                data.show = false;
+              }
+            });
+            setTimeout(() => {
+              setInterval(() => this.ref.markForCheck(), 200);
+            }, 1000);
+          }
+        });
+
+    this.stickLabelNameFilter
+        .debounceTime(500)
+        .distinctUntilChanged()
+        .subscribe((name: string) => {
+          if (this.stickName.length) {
+            this.filterOnGoing = true;
+
+            this.imageStickLabels.forEach(data => {
+              if (data.label.name.indexOf(this.stickName) !== -1) {
+                data.show = true;
+              }else {
+                data.show = false;
+              }
+            });
+            setTimeout(() => {
+              setInterval(() => this.ref.markForCheck(), 200);
+            }, 1000);
+          }
+        });
+
+  }
+
+  ngAfterViewInit() {
+    if (!this.withAdmiral) {
+      this.getAllLabels();
+    }
+  }
+
+  public get filterLabelPieceWidth() {
+    let len = this.lastFilteredTagName.length ? this.lastFilteredTagName.length * 6 + 60 : 115;
+    return len > 210 ? 210 : len;
+}
+
+  doSearchTagNames(tagName: string) {
+    this.lastFilteredTagName = tagName;
+    this.currentPage = 1;
+
+    let st: State = this.currentState;
+    if (!st) {
+      st = { page: {} };
+    }
+    st.page.size = this.pageSize;
+    st.page.from = 0;
+    st.page.to = this.pageSize - 1;
+    let selectedLab = this.imageFilterLabels.find(label => label.iconsShow === true);
+    if (selectedLab) {
+      st.filters = [{property: 'name', value: this.lastFilteredTagName}, {property: 'labels.id', value: selectedLab.label.id}];
+    }else {
+      st.filters = [{property: 'name', value: this.lastFilteredTagName}];
+    }
+
+    this.clrLoad(st);
+  }
+
+  clrLoad(state: State): void {
+    this.selectedRow = [];
+    // Keep it for future filtering and sorting
+    this.currentState = state;
+
+    let pageNumber: number = calculatePage(state);
+    if (pageNumber <= 0) { pageNumber = 1; }
+
+    // Pagination
+    let params: RequestQueryParams = new RequestQueryParams();
+    params.set("page", "" + pageNumber);
+    params.set("page_size", "" + this.pageSize);
+
+    this.loading = true;
+
+    toPromise<Tag[]>(this.tagService.getTags(
+      this.repoName,
+      params))
+      .then((tags: Tag[]) => {
+        this.signedCon = {};
+        // Do filtering and sorting
+        this.tags = doFiltering<Tag>(tags, state);
+        this.tags = doSorting<Tag>(this.tags, state);
+
+        this.loading = false;
+      })
+      .catch(error => {
+        this.loading = false;
+        this.errorHandler.error(error);
+      });
+
+    // Force refresh view
+    let hnd = setInterval(() => this.ref.markForCheck(), 100);
+    setTimeout(() => clearInterval(hnd), 5000);
+  }
+
+  refresh() {
+    this.doSearchTagNames("");
+  }
+
+  getAllLabels(): void {
+    toPromise<Label[]>(this.labelService.getGLabels()).then((res: Label[]) => {
+      if (res.length) {
+        res.forEach(data => {
+          this.imageLabels.push({'iconsShow': false, 'label': data, 'show': true});
+        });
+      }
+
+      toPromise<Label[]>(this.labelService.getPLabels(this.projectId)).then((res1: Label[]) => {
+        if (res1.length) {
+          res1.forEach(data => {
+            this.imageLabels.push({'iconsShow': false, 'label': data, 'show': true});
+          });
+        }
+        this.imageFilterLabels = clone(this.imageLabels);
+        this.imageStickLabels = clone(this.imageLabels);
+      }).catch(error => {
+        this.errorHandler.error(error);
+      });
+    }).catch(error => {
+      this.errorHandler.error(error);
+    });
+  }
+
+  labelSelectedChange(tag?: Tag[]): void {
+    if (tag && tag[0].labels) {
+      this.imageStickLabels.forEach(data => {
+        data.iconsShow = false;
+        data.show = true;
+      });
+      if (tag[0].labels.length) {
+        tag[0].labels.forEach((labelInfo: Label) => {
+          let findedLabel = this.imageStickLabels.find(data => labelInfo.id === data['label'].id);
+          this.imageStickLabels.splice(this.imageStickLabels.indexOf(findedLabel), 1);
+          this.imageStickLabels.unshift(findedLabel);
+
+          findedLabel.iconsShow = true;
+        });
+      }
+    }
+  }
+
+  addLabels(tag: Tag[]): void {
+    this.labelListOpen = true;
+    this.selectedTag = tag;
+    this.stickName = '';
+    this.labelSelectedChange(tag);
+  }
+
+  stickLabel(labelInfo: LabelState): void {
+    if (labelInfo && !labelInfo.iconsShow) {
+      this.selectLabel(labelInfo);
+    }
+    if (labelInfo && labelInfo.iconsShow) {
+      this.unSelectLabel(labelInfo);
+    }
+  }
+
+  selectLabel(labelInfo: LabelState): void {
+    if (!this.inprogress) {
+      this.inprogress = true;
+      let labelId = labelInfo.label.id;
+      this.selectedRow = this.selectedTag;
+      toPromise<any>(this.tagService.addLabelToImages(this.repoName, this.selectedRow[0].name, labelId)).then(res => {
+        this.refresh();
+
+        // set the selected label in front
+        this.imageStickLabels.splice(this.imageStickLabels.indexOf(labelInfo), 1);
+        this.imageStickLabels.some((data, i) => {
+          if (!data.iconsShow) {
+            this.imageStickLabels.splice(i, 0, labelInfo);
+            return true;
+          }
+        });
+
+        labelInfo.iconsShow = true;
+        this.inprogress = false;
+      }).catch(err => {
+        this.inprogress = false;
+        this.errorHandler.error(err);
+      });
+    }
+  }
+
+  unSelectLabel(labelInfo: LabelState): void {
+      if (!this.inprogress) {
+        this.inprogress = true;
+        let labelId = labelInfo.label.id;
+        this.selectedRow = this.selectedTag;
+        toPromise<any>(this.tagService.deleteLabelToImages(this.repoName, this.selectedRow[0].name, labelId)).then(res => {
+          this.refresh();
+
+          // insert the unselected label to groups with the same icons
+          this.sortOperation(this.imageStickLabels, labelInfo);
+        labelInfo.iconsShow = false;
+        this.inprogress = false;
+      }).catch(err => {
+        this.inprogress = false;
+        this.errorHandler.error(err);
+      });
+    }
+  }
+
+  rightFilterLabel(labelInfo: LabelState): void {
+    if (labelInfo) {
+      if (!labelInfo.iconsShow) {
+        this.filterLabel(labelInfo);
+      } else {
+        this.unFilterLabel(labelInfo);
+      }
+    }
+  }
+
+  filterLabel(labelInfo: LabelState): void {
+    let labelId = labelInfo.label.id;
+    // insert the unselected label to groups with the same icons
+    let preLabelInfo = this.imageFilterLabels.find(data => data.label.id === this.filterOneLabel.id);
+    if (preLabelInfo) {
+      this.sortOperation(this.imageFilterLabels, preLabelInfo);
+    }
+
+    this.imageFilterLabels.filter(data => {
+      if (data.label.id !== labelId) {
+        data.iconsShow = false;
+      }else {
+        data.iconsShow = true;
+      }
+    });
+     this.imageFilterLabels.splice(this.imageFilterLabels.indexOf(labelInfo), 1);
+     this.imageFilterLabels.unshift(labelInfo);
+     this.filterOneLabel = labelInfo.label;
+
+      // reload data
+      this.currentPage = 1;
+      let st: State = this.currentState;
+      if (!st) {
+        st = { page: {} };
+      }
+      st.page.size = this.pageSize;
+      st.page.from = 0;
+      st.page.to = this.pageSize - 1;
+      if (this.lastFilteredTagName) {
+        st.filters = [{property: 'name', value: this.lastFilteredTagName}, {property: 'labels.id', value: labelId}];
+      }else {
+        st.filters = [{property: 'labels.id', value: labelId}];
+      }
+
+      this.clrLoad(st);
+  }
+
+  unFilterLabel(labelInfo: LabelState): void {
+    // insert the unselected label to groups with the same icons
+    this.sortOperation(this.imageFilterLabels, labelInfo);
+
+    this.filterOneLabel = this.initFilter;
+    labelInfo.iconsShow = false;
+
+    // reload data
+    this.currentPage = 1;
+    let st: State = this.currentState;
+    if (!st) {
+      st = { page: {} };
+    }
+    st.page.size = this.pageSize;
+    st.page.from = 0;
+    st.page.to = this.pageSize - 1;
+    if (this.lastFilteredTagName) {
+      st.filters = [{property: 'name', value: this.lastFilteredTagName}];
+    }else {
+      st.filters = [];
+    }
+    this.clrLoad(st);
+  }
+
+  closeFilter(): void {
+    this.openLabelFilterPanel = false;
+  }
+
+  openFlagEvent(isOpen: boolean): void {
+    if (isOpen) {
+      this.openLabelFilterPanel = true;
+      this.openLabelFilterPiece = true;
+      this.filterName = '';
+      // redisplay all labels
+      this.imageFilterLabels.forEach(data => {
+        if (data.label.name.indexOf(this.filterName) !== -1) {
+          data.show = true;
+        }else {
+          data.show = false;
+        }
+      });
+    }else  {
+      this.openLabelFilterPanel = false;
+      this.openLabelFilterPiece = false;
+    }
+
+  }
+
+  handleInputFilter() {
+    if (this.filterName.length) {
+      this.labelNameFilter.next(this.filterName);
+    }else {
+      this.imageFilterLabels.every(data => data.show = true);
+    }
+  }
+
+  handleStickInputFilter() {
+    if (this.stickName.length) {
+      this.stickLabelNameFilter.next(this.stickName);
+    }else {
+      this.imageStickLabels.every(data => data.show = true);
+    }
+  }
+
+  // insert the unselected label to groups with the same icons
+  sortOperation(labelList: LabelState[], labelInfo: LabelState): void {
+    labelList.some((data, i) => {
+      if (!data.iconsShow) {
+        if (data.label.scope === labelInfo.label.scope) {
+          labelList.splice(i, 0, labelInfo);
+          labelList.splice(labelList.indexOf(labelInfo, 0), 1);
+          return true;
+        }
+        if (data.label.scope !== labelInfo.label.scope && i === labelList.length - 1) {
+          labelList.push(labelInfo);
+          labelList.splice(labelList.indexOf(labelInfo), 1);
+          return true;
+        }
+      }
+    });
   }
 
   retrieve() {
@@ -143,7 +516,7 @@ export class TagComponent implements OnInit {
     toPromise<Tag[]>(this.tagService
       .getTags(this.repoName))
       .then(items => {
-        //To keep easy use for vulnerability bar
+        // To keep easy use for vulnerability bar
         items.forEach((t: Tag) => {
           if (!t.scan_overview) {
             t.scan_overview = {
@@ -159,9 +532,6 @@ export class TagComponent implements OnInit {
       if (t.signature !== null) {
         signatures.push(t.name);
       }
-
-      //size
-          t.size = this.sizeTransform(t.size);
       });
       this.tags = items;
         let signedName: {[key: string]: string[]} = {};
@@ -183,45 +553,99 @@ export class TagComponent implements OnInit {
   sizeTransform(tagSize: string): string {
     let size: number = Number.parseInt(tagSize);
     if (Math.pow(1024, 1) <= size && size < Math.pow(1024, 2)) {
-      return (size / Math.pow(1024, 1)).toFixed(2) + 'KB';
+      return (size / Math.pow(1024, 1)).toFixed(2) + "KB";
     } else if (Math.pow(1024, 2) <= size && size < Math.pow(1024, 3)) {
-      return  (size / Math.pow(1024, 2)).toFixed(2) + 'MB';
+      return  (size / Math.pow(1024, 2)).toFixed(2) + "MB";
     } else if (Math.pow(1024, 3) <= size && size < Math.pow(1024, 4)) {
-      return  (size / Math.pow(1024, 3)).toFixed(2) + 'MB';
+      return  (size / Math.pow(1024, 3)).toFixed(2) + "GB";
     } else {
-      return size + 'B';
+      return size + "B";
     }
   }
 
-  deleteTag(tag: Tag) {
-    if (tag) {
+  deleteTags(tags: Tag[]) {
+    if (tags && tags.length) {
+      let tagNames: string[] = [];
+      this.batchDelectionInfos = [];
+      tags.forEach(tag => {
+        tagNames.push(tag.name);
+        let initBatchMessage = new BatchInfo ();
+        initBatchMessage.name = tag.name;
+        this.batchDelectionInfos.push(initBatchMessage);
+      });
+
       let titleKey: string, summaryKey: string, content: string, buttons: ConfirmationButtons;
-      if (tag.signature) {
-        titleKey = 'REPOSITORY.DELETION_TITLE_TAG_DENIED';
-        summaryKey = 'REPOSITORY.DELETION_SUMMARY_TAG_DENIED';
-        buttons = ConfirmationButtons.CLOSE;
-        content = 'notary -s https://' + this.registryUrl + ':4443 -d ~/.docker/trust remove -p ' + this.registryUrl + '/' + this.repoName + ' ' + tag.name;
-      } else {
-        titleKey = 'REPOSITORY.DELETION_TITLE_TAG';
-        summaryKey = 'REPOSITORY.DELETION_SUMMARY_TAG';
-        buttons = ConfirmationButtons.DELETE_CANCEL;
-        content = tag.name;
-      }
+      titleKey = "REPOSITORY.DELETION_TITLE_TAG";
+      summaryKey = "REPOSITORY.DELETION_SUMMARY_TAG";
+      buttons = ConfirmationButtons.DELETE_CANCEL;
+      content = tagNames.join(" , ");
       let message = new ConfirmationMessage(
         titleKey,
         summaryKey,
         content,
-        tag,
+        tags,
         ConfirmationTargets.TAG,
         buttons);
       this.confirmationDialog.open(message);
     }
   }
 
-  showDigestId(tag: Tag) {
-    if (tag) {
-      this.manifestInfoTitle = 'REPOSITORY.COPY_DIGEST_ID';
-      this.digestId = tag.digest;
+  confirmDeletion(message: ConfirmationAcknowledgement) {
+    if (message &&
+        message.source === ConfirmationTargets.TAG
+        && message.state === ConfirmationState.CONFIRMED) {
+      let tags: Tag[] = message.data;
+      if (tags && tags.length) {
+        let promiseLists: any[] = [];
+        tags.forEach(tag => {
+          promiseLists.push(this.delOperate(tag.signature, tag.name));
+        });
+
+        Promise.all(promiseLists).then((item) => {
+          this.selectedRow = [];
+          this.retrieve();
+        });
+      }
+    }
+  }
+
+  delOperate(signature: any, name:  string) {
+    let findedList = this.batchDelectionInfos.find(data => data.name === name);
+    if (signature) {
+      Observable.forkJoin(this.translateService.get("BATCH.DELETED_FAILURE"),
+        this.translateService.get("REPOSITORY.DELETION_SUMMARY_TAG_DENIED")).subscribe(res => {
+        let wrongInfo: string = res[1] + "notary -s https://" + this.registryUrl + ":4443 -d ~/.docker/trust remove -p " +
+         this.registryUrl + "/" + this.repoName + " " + name;
+        findedList = BathInfoChanges(findedList, res[0], false, true, wrongInfo);
+      });
+    } else {
+      return toPromise<number>(this.tagService
+          .deleteTag(this.repoName, name))
+          .then(
+              response => {
+                this.translateService.get("BATCH.DELETED_SUCCESS")
+                    .subscribe(res =>  {
+                      findedList = BathInfoChanges(findedList, res);
+                    });
+              }).catch(error => {
+            if (error.status === 503) {
+              Observable.forkJoin(this.translateService.get('BATCH.DELETED_FAILURE'),
+                  this.translateService.get('REPOSITORY.TAGS_NO_DELETE')).subscribe(res => {
+                findedList = BathInfoChanges(findedList, res[0], false, true, res[1]);
+              });
+              return;
+            }
+            this.translateService.get("BATCH.DELETED_FAILURE").subscribe(res => {
+              findedList = BathInfoChanges(findedList, res, false, true);
+            });
+          });
+    }
+  }
+
+  showDigestId(tag: Tag[]) {
+    if (tag && (tag.length === 1)) {
+      this.manifestInfoTitle = "REPOSITORY.COPY_DIGEST_ID";
+      this.digestId = tag[0].digest;
       this.showTagManifestOpened = true;
       this.copyFailed = false;
     }
@@ -240,20 +664,20 @@ export class TagComponent implements OnInit {
 
   onSuccess($event: any): void {
     this.copyFailed = false;
-    //Directly close dialog
+    // Directly close dialog
     this.showTagManifestOpened = false;
   }
 
   onError($event: any): void {
-    //Show error
+    // Show error
     this.copyFailed = true;
-    //Select all text
+    // Select all text
     if (this.textInput) {
       this.textInput.nativeElement.select();
     }
   }
 
-  //Get vulnerability scanning status
+  // Get vulnerability scanning status
   scanStatus(t: Tag): string {
     if (t && t.scan_overview && t.scan_overview.scan_status) {
       return t.scan_overview.scan_status;
@@ -269,20 +693,28 @@ export class TagComponent implements OnInit {
       t.scan_overview.components.total > 0 ? true : false;
   }
 
-  //Whether show the 'scan now' menu
-  canScanNow(t: Tag): boolean {
+  // Whether show the 'scan now' menu
+  canScanNow(t: Tag[]): boolean {
     if (!this.withClair) { return false; }
     if (!this.hasProjectAdminRole) { return false; }
-    let st: string = this.scanStatus(t);
+      let st: string = this.scanStatus(t[0]);
 
     return st !== VULNERABILITY_SCAN_STATUS.pending &&
       st !== VULNERABILITY_SCAN_STATUS.running;
   }
 
-  //Trigger scan
-  scanNow(tagId: string): void {
-    if (tagId) {
-      this.channel.publishScanEvent(this.repoName + "/" + tagId);
+  // Trigger scan
+  scanNow(t: Tag[]): void {
+    if (t && t.length) {
+      t.forEach((data: any) => {
+        let tagId = data.name;
+        this.channel.publishScanEvent(this.repoName + "/" + tagId);
+      });
     }
+  }
+
+  // pull command
+  onCpError($event: any): void {
+      this.copyInput.setPullCommendShow();
   }
 }

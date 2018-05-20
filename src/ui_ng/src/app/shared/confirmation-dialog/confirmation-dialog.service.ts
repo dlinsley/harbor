@@ -11,33 +11,38 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { Injectable } from '@angular/core'
+import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs/Subject';
 
 import { ConfirmationMessage } from './confirmation-message';
-import { ConfirmationState } from '../shared.const';
 import { ConfirmationAcknowledgement } from './confirmation-state-message';
+import {BatchInfo} from "./confirmation-batch-message";
 
 @Injectable()
 export class ConfirmationDialogService {
     confirmationAnnoucedSource = new Subject<ConfirmationMessage>();
     confirmationConfirmSource = new Subject<ConfirmationAcknowledgement>();
+    confirmationBatchSource = new Subject<BatchInfo[]>();
 
     confirmationAnnouced$ = this.confirmationAnnoucedSource.asObservable();
     confirmationConfirm$ = this.confirmationConfirmSource.asObservable();
+    confirmationBatch$ = this.confirmationBatchSource.asObservable();
 
-    //User confirm the action
+    // User confirm the action
     public confirm(ack: ConfirmationAcknowledgement): void {
         this.confirmationConfirmSource.next(ack);
     }
 
-    //User cancel the action
+    // User cancel the action
     public cancel(ack: ConfirmationAcknowledgement): void {
         this.confirm(ack);
     }
 
-    //Open the confirmation dialog
+    // Open the confirmation dialog
     public openComfirmDialog(message: ConfirmationMessage): void {
         this.confirmationAnnoucedSource.next(message);
+    }
+    public addBatchInfoList(data: BatchInfo[]): void {
+        this.confirmationBatchSource.next(data);
     }
 }

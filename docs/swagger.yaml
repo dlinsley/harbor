@@ -2,7 +2,7 @@ swagger: '2.0'
 info:
   title: Harbor API
   description: These APIs provide services for manipulating Harbor project.
-  version: 0.3.0
+  version: 1.4.0
 host: localhost
 schemes:
   - http
@@ -11,7 +11,6 @@ produces:
   - application/json
   - text/plain
 consumes:
-  - text/plain
   - application/json
 paths:
   /search:
@@ -142,6 +141,8 @@ paths:
           description: User need to log in first.
         '409':
           description: Project name already exists.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
   '/projects/{project_id}':
@@ -167,6 +168,38 @@ paths:
           description: User need to log in first.
         '500':
           description: Internal errors.
+    put:
+      summary: Update properties for a selected project.
+      description: |
+        This endpoint is aimed to update the properties of a project.
+      parameters:
+        - name: project_id
+          in: path
+          type: integer
+          format: int64
+          required: true
+          description: Selected project ID.
+        - name: project
+          in: body
+          required: true
+          schema:
+            $ref: '#/definitions/ProjectReq'
+          description: Updates of project.
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Updated project properties successfully.
+        '400':
+          description: Illegal format of provided ID value.
+        '401':
+          description: User need to log in first.
+        '403':
+          description: User does not have permission to the project.
+        '404':
+          description: Project ID does not exist.
+        '500':
+          description: Unexpected internal errors.
     delete:
       summary: Delete project by projectID
       description: |
@@ -193,39 +226,6 @@ paths:
           description: 'Project contains policies, can not be deleted.'
         '500':
           description: Internal errors.
-  '/projects/{project_id}/publicity':
-    put:
-      summary: Update properties for a selected project.
-      description: |
-        This endpoint is aimed to toggle a project publicity status.
-      parameters:
-        - name: project_id
-          in: path
-          type: integer
-          format: int64
-          required: true
-          description: Selected project ID.
-        - name: project
-          in: body
-          required: true
-          schema:
-            $ref: '#/definitions/Project'
-          description: Updates of project.
-      tags:
-        - Products
-      responses:
-        '200':
-          description: Updated project publicity status successfully.
-        '400':
-          description: Illegal format of provided ID value.
-        '401':
-          description: User need to log in first.
-        '403':
-          description: User does not have permission to the project.
-        '404':
-          description: Project ID does not exist.
-        '500':
-          description: Unexpected internal errors.
   '/projects/{project_id}/logs':
     get:
       summary: Get access logs accompany with a relevant project.
@@ -303,117 +303,195 @@ paths:
           description: User need to log in first.
         '500':
           description: Unexpected internal errors.
-  '/projects/{project_id}/members/':
+  '/projects/{project_id}/metadatas':
     get:
-      summary: Return a project's relevant role members.
-      description: >
-        This endpoint is for user to search a specified project's relevant role
-        members.
+      summary: Get project metadata.
+      description: |
+        This endpoint returns metadata of the project specified by project ID.
       parameters:
         - name: project_id
           in: path
+          description: The ID of project.
+          required: true
           type: integer
           format: int64
-          required: true
-          description: Relevant project ID.
       tags:
         - Products
       responses:
         '200':
-          description: Get project's relevant role members successfully.
+          description: Get metadata successfully.
           schema:
-            type: array
-            items:
-              $ref: '#/definitions/User'
-        '400':
-          description: Illegal format of provided ID value.
+            $ref: '#/definitions/ProjectMetadata'
         '401':
-          description: User need to log in first.
-        '403':
-          description: User in session does not have permission to the project.
-        '404':
-          description: Project ID does not exist.
+          description: User need to login first.
         '500':
-          description: Unexpected internal errors.
+          description: Internal server errors.
     post:
-      summary: Add project role member accompany with relevant project and user.
-      description: >
-        This endpoint is for user to add project role member accompany with
-        relevant project and user.
+      summary: Add metadata for the project.
+      description: |
+        This endpoint is aimed to add metadata of a project.
       parameters:
         - name: project_id
           in: path
           type: integer
           format: int64
           required: true
-          description: Relevant project ID.
-        - name: roles
+          description: Selected project ID.
+        - name: metadata
           in: body
-          description: >-
-            Role members for adding to relevant project. Only one role is
-            supported in the role list.
+          required: true
           schema:
-            $ref: '#/definitions/RoleParam'
+            $ref: '#/definitions/ProjectMetadata'
+          description: The metadata of project.
       tags:
         - Products
       responses:
         '200':
-          description: Role members added to relevant project successfully.
+          description: Add metadata successfully.
         '400':
-          description: Illegal format of provided ID value.
+          description: Invalid request.
         '401':
           description: User need to log in first.
         '403':
-          description: User in session does not have permission to the project.
+          description: User does not have permission to the project.
         '404':
-          description: Project ID or username does not exist.
-        '409':
-          description: User has already added as a project role member.
+          description: Project ID does not exist.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
-          description: Unexpected internal errors.
-  '/projects/{project_id}/members/{user_id}':
+          description: Internal server errors.
+  '/projects/{project_id}/metadatas/{meta_name}':
     get:
-      summary: Return role members accompany with relevant project and user.
-      description: >
-        This endpoint is for user to get role members accompany with relevant
-        project and user. 
+      summary: Get project metadata
+      description: |
+        This endpoint returns specified metadata of a project.
+      parameters:
+        - name: project_id
+          in: path
+          description: Project ID for filtering results.
+          required: true
+          type: integer
+          format: int64
+        - name: meta_name
+          in: path
+          description: The name of metadat.
+          required: true
+          type: string
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Get metadata successfully.
+          schema:
+            $ref: '#/definitions/ProjectMetadata'
+        '401':
+          description: User need to log in first.
+        '500':
+          description: Internal server errors.
+    put:
+      summary: Update metadata of a project.
+      description: |
+        This endpoint is aimed to update the metadata of a project.
       parameters:
         - name: project_id
           in: path
           type: integer
           format: int64
           required: true
-          description: Relevant project ID
-        - name: user_id
+          description: The ID of project.
+        - name: meta_name
           in: path
-          type: integer
-          format: int
+          description: The name of metadat.
           required: true
-          description: Relevant user ID
+          type: string
       tags:
         - Products
       responses:
         '200':
-          description: Get project role members successfully.
-          schema:
-            type: array
-            items:
-              $ref: '#/definitions/Role'
+          description: Updated metadata successfully.
         '400':
-          description: Illegal format of provided ID value.
+          description: Invalid request.
         '401':
           description: User need to log in first.
         '403':
-          description: User in session does not have permission to the project.
+          description: User does not have permission to the project.
         '404':
-          description: Project ID does not exist.
+          description: Project or metadata does not exist.
         '500':
-          description: Unexpected internal errors.
-    put:
-      summary: Update project role members accompany with relevant project and user.
-      description: >
-        This endpoint is for user to update current project role members
-        accompany with relevant project and user.
+          description: Internal server errors.
+    delete:
+      summary: Delete metadata of a project
+      description: |
+        This endpoint is aimed to delete metadata of a project.
+      parameters:
+        - name: project_id
+          in: path
+          description: The ID of project.
+          required: true
+          type: integer
+          format: int64
+        - name: meta_name
+          in: path
+          description: The name of metadat.
+          required: true
+          type: string
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Metadata is deleted successfully.
+        '400':
+          description: Invalid requst.
+        '403':
+          description: User need to log in first.
+        '404':
+          description: Project or metadata does not exist.
+        '500':
+          description: Internal server errors.
+  '/projects/{project_id}/members':
+    get:
+     summary: Get all project member information
+     description: Get all project member information
+     parameters:
+      - name: project_id
+        in: path
+        type: integer
+        format: int64
+        required: true
+        description: Relevant project ID.
+      - name: entityname
+        in: query
+        type: string
+        description: The entity name to search.
+     tags:
+      - Products
+     responses:
+      '200':
+        description: Get project members successfully.
+        schema:
+          type: array
+          items: 
+            $ref: '#/definitions/ProjectMemberEntity'
+      '400':
+        description: The project id is invalid.
+      '401':
+        description: User need to log in first.
+      '403':
+        description: User in session does not have permission to the project.
+      '404':
+        description: Project ID does not exist.
+      '500':
+        description: Unexpected internal errors.
+    post:
+      summary: Create project member
+      description: >-
+        Create project member relationship, the member can be one of the user_member and group_member, 
+        The user_member need to specify user_id or username. If the user already exist in harbor DB, specify the user_id, 
+        If does not exist in harbor DB, it will SearchAndOnBoard the user.
+        The group_member need to specify id or ldap_group_dn. If the group already exist in harbor DB. specify the user group's id, 
+        If does not exist, it will SearchAndOnBoard the group. 
+      tags:
+       - Products
       parameters:
         - name: project_id
           in: path
@@ -421,65 +499,120 @@ paths:
           format: int64
           required: true
           description: Relevant project ID.
-        - name: user_id
-          in: path
-          type: integer
-          format: int
-          required: true
-          description: Relevant user ID.
-        - name: roles
+        - name: project_member
           in: body
           schema:
-            $ref: '#/definitions/RoleParam'
-          description: Updates for roles and username.
-      tags:
-        - Products
+            $ref: '#/definitions/ProjectMember'
       responses:
-        '200':
-          description: Project role members updated successfully.
+        '201':
+          description: Project member created successfully.
         '400':
-          description: Illegal format of provided ID value.
+          description: Illegal format of project member or project id is invalid.
         '401':
           description: User need to log in first.
         '403':
           description: User in session does not have permission to the project.
         '404':
-          description: Project ID does not exist.
+          description: Project does not exist, or the username does not found, or the user group does not found.
         '500':
-          description: Unexpected internal errors.
+          description: Unexpected internal errors.  
+  '/projects/{project_id}/members/{mid}':
+    get:
+     summary: Get the project member information
+     description: Get the project member information
+     tags:
+      - Products
+     parameters:
+      - name: project_id
+        in: path
+        type: integer
+        format: int64
+        required: true
+        description: Relevant project ID.
+      - name: mid
+        in: path
+        type: integer
+        format: int64
+        required: true
+        description: The member ID
+     responses:
+        '200':
+          description: Project member retrieved successfully.
+          schema:
+            $ref: '#/definitions/ProjectMemberEntity'
+        '400':
+          description: Illegal format of project member or invalid project id, member id.
+        '401':
+          description: User need to log in first.
+        '403':
+          description: User in session does not have permission to the project.
+        '404':
+          description: Project or projet member does not exist.
+        '500':
+          description: Unexpected internal errors.  
+    put:
+     summary: Update project member
+     description: Update project member relationship
+     tags:
+        - Products
+     parameters:
+      - name: project_id
+        in: path
+        type: integer
+        format: int64
+        required: true
+        description: Relevant project ID.
+      - name: mid
+        in: path
+        type: integer
+        format: int64
+        required: true
+        description: Member ID.  
+      - name: role
+        in: body
+        schema:
+          $ref: '#/definitions/RoleRequest'
+     responses:
+      '200':
+        description: Project member updated successfully.
+      '400':
+        description: Invalid role id, it should be 1,2 or 3, or invalid project id, or invalid member id.
+      '401':
+        description: User need to log in first.
+      '403':
+        description: User in session does not have permission to the project.
+      '404':
+        description: project or project member does not exist.
+      '500':
+        description: Unexpected internal errors.           
     delete:
-      summary: Delete project role members accompany with relevant project and user.
-      description: >
-        This endpoint is aimed to remove project role members already added to
-        the relevant project and user.
-      parameters:
-        - name: project_id
-          in: path
-          type: integer
-          format: int64
-          required: true
-          description: Relevant project ID.
-        - name: user_id
-          in: path
-          type: integer
-          format: int
-          required: true
-          description: Relevant user ID.
-      tags:
-        - Products
-      responses:
-        '200':
-          description: Project role members deleted successfully.
-        '400':
-          description: Illegal format of provided ID value.
-        '401':
-          description: User need to log in first.
-        '403':
-          description: User in session does not have permission to the project.
-        '404':
-          description: Project ID does not exist.
-        '500':
-          description: Unexpected internal errors.
+     summary: Delete project member
+     tags:
+      - Products
+     parameters:
+      - name: project_id
+        in: path
+        type: integer
+        format: int64
+        required: true
+        description: Relevant project ID.
+      - name: mid
+        in: path
+        type: integer
+        format: int64
+        required: true
+        description: Member ID.  
+     responses:
+      '200':
+        description: Project member deleted successfully.
+      '400':
+        description: The project id or project member id is invalid.
+      '401':
+        description: User need to log in first.
+      '403':
+        description: User in session does not have permission to the project.
+      '500':
+        description: Unexpected internal errors.  
   /statistics:
     get:
       summary: Get projects number and repositories number relevant to the user
@@ -570,6 +703,8 @@ paths:
           description: >-
             User registration can only be used by admin role user when
             self-registration is off.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
   /users/current:
@@ -757,6 +892,11 @@ paths:
           type: string
           required: false
           description: Repo name for filtering results.
+        - name: label_id
+          in: query
+          type: integer
+          required: false
+          description: The ID of label used to filter the result.
         - name: page
           in: query
           type: integer
@@ -819,6 +959,113 @@ paths:
           description: Forbidden.
         '404':
           description: Repository not found.
+    put:
+      summary: Update description of the repository.
+      description: |
+        This endpoint is used to update description of the repository.
+      parameters:
+        - name: repo_name
+          in: path
+          type: string
+          required: true
+          description: The name of repository which will be deleted.
+        - name: description
+          in: body
+          description: The description of the repository.
+          required: true
+          schema:
+            $ref: '#/definitions/RepositoryDescription'
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Update successfully.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden.
+        '404':
+          description: Repository not found.
+  '/repositories/{repo_name}/labels':
+    get:
+      summary: Get labels of a repository.
+      description: |
+        Get labels of a repository specified by the repo_name.
+      parameters:
+        - name: repo_name
+          in: path
+          type: string
+          required: true
+          description: The name of repository.
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Successfully.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Label'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden. User should have read permisson for the repository to perform the action.
+        '404':
+          description: Repository not found.
+    post:
+      summary: Add a label to the repository.
+      description: |
+        Add a label to the repository.
+      parameters:
+        - name: repo_name
+          in: path
+          type: string
+          required: true
+          description: The name of repository.
+        - name: label
+          in: body
+          description: Only the ID property is required.
+          required: true
+          schema:
+            $ref: '#/definitions/Label'
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Successfully.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden. User should have write permisson for the repository to perform the action.
+        '404':
+          description: Resource not found.
+  '/repositories/{repo_name}/labels/{label_id}':
+    delete:
+      summary: Delete label from the repository.
+      description: |
+        Delete the label from the repository specified by the repo_name.
+      parameters:
+        - name: repo_name
+          in: path
+          type: string
+          required: true
+          description: The name of repository.
+        - name: label_id
+          in: path
+          type: integer
+          required: true
+          description: The ID of label.
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Successfully.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden. User should have write permisson for the repository to perform the action.
+        '404':
+          description: Resource not found.
   '/repositories/{repo_name}/tags/{tag}':
     get:
       summary: Get the tag of the repository.
@@ -888,6 +1135,11 @@ paths:
           type: string
           required: true
           description: Relevant repository name.
+        - name: label_ids
+          in: query
+          type: string
+          required: false
+          description: A list of comma separated label IDs.
       tags:
         - Products
       responses:
@@ -899,6 +1151,101 @@ paths:
               $ref: '#/definitions/DetailedTag'
         '500':
           description: Unexpected internal errors.
+  '/repositories/{repo_name}/tags/{tag}/labels':
+    get:
+      summary: Get labels of an image.
+      description: |
+        Get labels of an image specified by the repo_name and tag.
+      parameters:
+        - name: repo_name
+          in: path
+          type: string
+          required: true
+          description: The name of repository.
+        - name: tag
+          in: path
+          type: string
+          required: true
+          description: The tag of the image.
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Successfully.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Label'
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden. User should have read permisson for the image to perform the action.
+        '404':
+          description: Resource not found.
+    post:
+      summary: Add a label to image.
+      description: |
+        Add a label to the image.
+      parameters:
+        - name: repo_name
+          in: path
+          type: string
+          required: true
+          description: The name of repository.
+        - name: tag
+          in: path
+          type: string
+          required: true
+          description: The tag of the image.
+        - name: label
+          in: body
+          description: Only the ID property is required.
+          required: true
+          schema:
+            $ref: '#/definitions/Label'
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Successfully.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden. User should have write permisson for the image to perform the action.
+        '404':
+          description: Resource not found.
+  '/repositories/{repo_name}/tags/{tag}/labels/{label_id}':
+    delete:
+      summary: Delete label from the image.
+      description: |
+        Delete the label from the image specified by the repo_name and tag.
+      parameters:
+        - name: repo_name
+          in: path
+          type: string
+          required: true
+          description: The name of repository.
+        - name: tag
+          in: path
+          type: string
+          required: true
+          description: The tag of the image.
+        - name: label_id
+          in: path
+          type: integer
+          required: true
+          description: The ID of label.
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Successfully.
+        '401':
+          description: Unauthorized.
+        '403':
+          description: Forbidden. User should have write permisson for the image to perform the action.
+        '404':
+          description: Resource not found.
   '/repositories/{repo_name}/tags/{tag}/manifest':
     get:
       summary: Get manifests of a relevant repository.
@@ -962,6 +1309,8 @@ paths:
           description: User doesn't have permission to perform the action.
         '404':
           description: The image does not exist in Harbor.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '503':
           description: Harbor is not deployed with Clair.
   /repositories/scanAll:
@@ -977,7 +1326,9 @@ paths:
         - name: project_id
           in: query
           type: integer
-          description: When this parm is set only the images under the project identified by the project_id will be scanned.
+          description: >-
+            When this parm is set only the images under the project identified
+            by the project_id will be scanned.
       responses:
         '202':
           description: >-
@@ -987,6 +1338,8 @@ paths:
           description: User needs to login or call the API with correct credentials.
         '403':
           description: User doesn't have permission to perform the action.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Failed to initiate the action.
         '503':
@@ -1016,7 +1369,7 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#definitions/VulnerabilityItem'
+              $ref: '#/definitions/VulnerabilityItem'
         '401':
           description: User needs to login or call the API with correct credentials.
         '403':
@@ -1222,7 +1575,33 @@ paths:
           description: User need to login first.
         '500':
           description: Unexpected internal errors.
-  /jobs/replication/{id}:
+    put:
+      summary: Update status of jobs. Only stop is supported for now.
+      description: |
+        The endpoint is used to stop the replication jobs of a policy.
+      tags:
+        - Products
+      parameters:
+        - name: policyinfo
+          in: body
+          description: The policy ID and status.
+          required: true
+          schema:
+            $ref: '#/definitions/UpdateJobs'
+      responses:
+        '200':
+          description: Update the status successfully.
+        '400':
+          description: Bad request because of invalid parameters.
+        '401':
+          description: User need to login first.
+        '403':
+          description: User has no privilege for the operation.
+        '404':
+          description: Resource requested does not exist.
+        '500':
+          description: Unexpected internal errors.
+  '/jobs/replication/{id}':
     delete:
       summary: Delete specific ID job.
       description: |
@@ -1247,7 +1626,7 @@ paths:
           description: Project ID does not exist.
         '500':
           description: Unexpected internal errors.
-  /jobs/replication/{id}/log:
+  '/jobs/replication/{id}/log':
     get:
       summary: Get job logs.
       description: |
@@ -1272,7 +1651,7 @@ paths:
           description: The specific repository ID's log does not exist.
         '500':
           description: Unexpected internal errors.
-  /jobs/scan/{id}/log:
+  '/jobs/scan/{id}/log':
     get:
       summary: Get job logs.
       description: |
@@ -1297,7 +1676,6 @@ paths:
           description: The specific repository ID's log does not exist.
         '500':
           description: Unexpected internal errors.
-      
   /policies/replication:
     get:
       summary: List filters policies by name and project_id
@@ -1316,6 +1694,18 @@ paths:
           format: int64
           required: false
           description: Relevant project ID.
+        - name: page
+          in: query
+          type: integer
+          format: int32
+          required: false
+          description: The page nubmer.
+        - name: page_size
+          in: query
+          type: integer
+          format: int32
+          required: false
+          description: The size of per page.
       tags:
         - Products
       responses:
@@ -1342,7 +1732,7 @@ paths:
           description: Create new policy.
           required: true
           schema:
-            $ref: '#/definitions/RepPolicyPost'
+            $ref: '#/definitions/RepPolicy'
       tags:
         - Products
       responses:
@@ -1356,9 +1746,11 @@ paths:
           description: >-
             Policy name already used or policy already exists with the same
             project and target.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
-  /policies/replication/{id}:
+  '/policies/replication/{id}':
     get:
       summary: Get replication policy.
       description: |
@@ -1397,10 +1789,10 @@ paths:
           description: policy ID
         - name: policyupdate
           in: body
-          description: 'Update policy name, description, target and enablement.'
+          description: Updated properties of the replication policy.
           required: true
           schema:
-            $ref: '#/definitions/RepPolicyUpdate'
+            $ref: '#/definitions/RepPolicy'
       tags:
         - Products
       responses:
@@ -1418,35 +1810,187 @@ paths:
             project and target.
         '500':
           description: Unexpected internal errors.
-  /policies/replication/{id}/enablement:
-    put:
-      summary: Put modifies enablement of the policy.
+  /labels:
+    get:
+      summary: List labels according to the query strings.
+      description: >
+        This endpoint let user list labels by name, scope and project_id
+      parameters:
+        - name: name
+          in: query
+          type: string
+          required: false
+          description: The label name.
+        - name: scope
+          in: query
+          type: string
+          required: true
+          description: The label scope. Valid values are g and p. g for global labels and p for project labels.
+        - name: project_id
+          in: query
+          type: integer
+          format: int64
+          required: false
+          description: Relevant project ID, required when scope is p.
+        - name: page
+          in: query
+          type: integer
+          format: int32
+          required: false
+          description: The page nubmer.
+        - name: page_size
+          in: query
+          type: integer
+          format: int32
+          required: false
+          description: The size of per page.
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Get successfully.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Label'
+        '400':
+          description: Invalid parameters.
+        '401':
+          description: User need to log in first.
+        '500':
+          description: Unexpected internal errors.
+    post:
+      summary: Post creates a label
+      description: >
+        This endpoint let user creates a label.
+      parameters:
+        - name: label
+          in: body
+          description: The json object of label.
+          required: true
+          schema:
+            $ref: '#/definitions/Label'
+      tags:
+        - Products
+      responses:
+        '201':
+          description: Create successfully.
+        '400':
+          description: Invalid parameters.
+        '401':
+          description: User need to log in first.
+        '409':
+          description: >-
+            Label with the same name and same scope already exists.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
+        '500':
+          description: Unexpected internal errors.
+  '/labels/{id}':
+    get:
+      summary: Get the label specified by ID.
       description: |
-        This endpoint let user update policy enablement flag.
+        This endpoint let user get the label by specific ID.
       parameters:
         - name: id
           in: path
           type: integer
           format: int64
           required: true
-          description: policy ID
-        - name: enabledflag
-          in: body
-          description: The policy enablement flag.
-          required: true
-          schema:
-            $ref: '#/definitions/RepPolicyEnablementReq'
+          description: Label ID
       tags:
         - Products
       responses:
         '200':
-          description: Update job policy enablement successfully.
-        '400':
-          description: Invalid enabled value.
+          description: Get successfully.
+          schema:
+            $ref: '#/definitions/Label'
         '401':
           description: User need to log in first.
         '404':
-          description: The specific repository ID's policy does not exist.
+          description: The resource does not exist.
+        '500':
+          description: Unexpected internal errors.
+    put:
+      summary: Update the label properties.
+      description: >
+        This endpoint let user update label properties.
+      parameters:
+        - name: id
+          in: path
+          type: integer
+          format: int64
+          required: true
+          description: Label ID
+        - name: label
+          in: body
+          description: The updated label json object.
+          required: true
+          schema:
+            $ref: '#/definitions/Label'
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Update successfully.
+        '400':
+          description: Invalid parameters.
+        '401':
+          description: User need to log in first.
+        '404':
+          description: The resource does not exist.
+        '409':
+          description: >-
+            The label with the same name already exists.
+        '500':
+          description: Unexpected internal errors.
+    delete:
+      summary: Delete the label specified by ID.
+      description: >
+        Delete the label specified by ID.
+      parameters:
+        - name: id
+          in: path
+          type: integer
+          format: int64
+          required: true
+          description: Label ID
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Delete successfully.
+        '400':
+          description: Invalid parameters.
+        '401':
+          description: User need to log in first.
+        '404':
+          description: The resource does not exist.
+        '500':
+          description: Unexpected internal errors.
+  /replications:
+    post:
+      summary: Trigger the replication according to the specified policy.
+      description: |
+        This endpoint is used to trigger a replication.
+      parameters:
+        - name: policy ID
+          in: body
+          description: The ID of replication policy.
+          required: true
+          schema:
+            $ref: '#/definitions/Replication'
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Trigger the replication successfully.
+        '401':
+          description: User need to log in first.
+        '404':
+          description: The policy does not exist.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
   /targets:
@@ -1496,6 +2040,8 @@ paths:
           description: User need to log in first.
         '409':
           description: Replication target name already exists.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
   /targets/ping:
@@ -1526,31 +2072,8 @@ paths:
             target.
         '404':
           description: Target not found.
-        '500':
-          description: Unexpected internal errors.
-  '/targets/{id}/ping':
-    post:
-      summary: Ping target.
-      description: |
-        This endpoint is for ping target.
-      parameters:
-        - name: id
-          in: path
-          type: integer
-          format: int64
-          required: true
-          description: The replication's target ID.
-      tags:
-        - Products
-      responses:
-        '200':
-          description: Ping replication's target successfully.
-        '400':
-          description: Can not ping target.
-        '401':
-          description: User need to log in first.
-        '404':
-          description: Target ID does not exist.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
   '/targets/{id}':
@@ -1678,6 +2201,8 @@ paths:
           description: User need to log in first.
         '403':
           description: User does not have permission of admin role.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
   /systeminfo:
@@ -1764,10 +2289,36 @@ paths:
           description: User need to login first.
         '403':
           description: Only admin has this authority.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
+        '500':
+          description: Unexpected internal errors.
+  /ldap/groups/search:
+    get:
+      summary: Search available ldap groups.
+      description: >
+        This endpoint searches the available ldap groups based on related
+        configuration parameters. Support searched by input ladp configuration,
+        load configuration from the system and specific filter.
+      parameters:
+        - name: groupname
+          in: query
+          type: string
+          required: false
+          description: Ldap group name
+      tags:
+        - Products
+      responses:
+        '200':
+          description: Search ldap group successfully.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/UserGroup'
         '500':
           description: Unexpected internal errors.
   /ldap/users/search:
-    post:
+    get:
       summary: Search available ldap users.
       description: >
         This endpoint searches the available ldap users based on related
@@ -1779,15 +2330,6 @@ paths:
           type: string
           required: false
           description: Registered user ID
-        - name: ldap_conf
-          in: body
-          description: >-
-            ldap search configuration. ldapconf field can input ldap service
-            configuration. If this item are blank, will load default
-            configuration will load current configuration from the system.
-          required: false
-          schema:
-            $ref: '#/definitions/LdapConf'
       tags:
         - Products
       responses:
@@ -1797,8 +2339,6 @@ paths:
             type: array
             items:
               $ref: '#/definitions/LdapUsers'
-        '400':
-          description: Inviald ldap configuration parameters.
         '401':
           description: User need to login first.
         '403':
@@ -1834,12 +2374,136 @@ paths:
           description: User need to login first.
         '403':
           description: Only admin has this authority.
-        '500':
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
+        '404':
           description: Failed import some users.
           schema:
             type: array
             items:
               $ref: '#/definitions/LdapFailedImportUsers'
+  /usergroups:
+   get:
+    summary: Get all user groups information
+    description: Get all user groups information
+    tags:
+     - Products
+    responses:
+      '200':
+        description: Get user group successfully.
+        schema:
+          type: array
+          items:
+            $ref: '#/definitions/UserGroup'
+      '401':
+        description: User need to log in first.
+      '403':
+        description: User in session does not have permission to the user group.
+      '500':
+        description: Unexpected internal errors.      
+   post:
+      summary: Create user group
+      description: Create user group information
+      tags:
+        - Products    
+      parameters:
+        - name: usergroup
+          in: body
+          schema:
+            $ref: '#/definitions/UserGroup'
+      responses:
+        '201':
+          description: User group created successfully.
+        '401':
+          description: User need to log in first.
+        '403':
+          description: User in session does not have permission to the user group.
+        '404':
+          description: The LDAP group is not found.  
+        '409':
+          description: An LDAP user group with same DN already exist. 
+        '500':
+          description: Unexpected internal errors.        
+  /usergroups/{group_id}:
+   get:
+    summary: Get user group information
+    description: Get user group information
+    tags:
+     - Products
+    parameters:
+     - name: group_id
+       in: path
+       type: integer
+       format: int64
+       required: true
+       description: Group ID
+    responses:
+      '200':
+        description: User group get successfully.
+        schema:
+          $ref: '#/definitions/UserGroup'
+      '400':
+        description: The user group id is invalid.
+      '401':
+        description: User need to log in first.
+      '403':
+        description: User in session does not have permission to the user group.
+      '404':
+        description: User group does not exist.
+      '500':
+        description: Unexpected internal errors.  
+   put:
+     summary: Update group information
+     description: Update user group information
+     tags:
+       - Products
+     parameters:
+       - name: group_id
+         in: path
+         type: integer
+         format: int64
+         required: true
+         description: Group ID
+       - name: usergroup
+         in: body
+         required: false
+         schema:
+           $ref: '#/definitions/UserGroup'
+     responses:
+       '200':
+         description: User group updated successfully.
+       '400':
+         description: The user group id is invalid.
+       '401':
+         description: User need to log in first.
+       '403':
+         description: Only admin has this authority.
+       '404':
+         description: User group does not exist.
+       '500':
+         description: Unexpected internal errors.  
+   delete:
+    summary: Delete user group
+    description: Delete user group
+    tags:
+     - Products
+    parameters:
+     - name: group_id
+       type: integer
+       in: path
+       required: true
+    responses:
+      '200':
+        description: User group deleted successfully.
+      '400':
+        description: The user group id is invalid.
+      '401':
+        description: User need to log in first.
+      '403':
+        description: Only admin has this authority.
+      '500':
+        description: Unexpected internal errors.       
+
   /configurations:
     get:
       summary: Get system configurations.
@@ -1872,7 +2536,9 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/Configurations'
-          description: The configuration map can contain a subset of the attributes of the schema, which are to be updated.
+          description: >-
+            The configuration map can contain a subset of the attributes of the
+            schema, which are to be updated.
       responses:
         '200':
           description: Modify system configurations successfully.
@@ -1897,6 +2563,8 @@ paths:
           description: User need to log in first.
         '403':
           description: User does not have permission of admin role.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
   /email/ping:
@@ -1924,8 +2592,14 @@ paths:
           description: User need to login first.
         '403':
           description: Only admin has this authority.
+        '415':
+          $ref: '#/responses/UnsupportedMediaType'
         '500':
           description: Unexpected internal errors.
+responses:
+  UnsupportedMediaType: 
+    description: The Media Type of the request is not supported, it has to be "application/json"
+
 definitions:
   Search:
     type: object
@@ -1969,26 +2643,9 @@ definitions:
       project_name:
         type: string
         description: The name of the project.
-      public:
-        type: integer
-        format: int
-        description: The public status of the project.
-      enable_content_trust:
-        type: boolean
-        description: >-
-          Whether content trust is enabled or not. If it is enabled, user cann't
-          pull unsigned images from this project.
-      prevent_vulnerable_images_from_running:
-        type: boolean
-        description: Whether prevent the vulnerable images from running.
-      prevent_vulnerable_images_from_running_severity:
-        type: string
-        description: >-
-          If the vulnerability is high than severity defined here, the images
-          cann't be pulled.
-      automatically_scan_images_on_push:
-        type: boolean
-        description: Whether scan images automatically when pushing.
+      metadata:
+        description: The metadata of the project.
+        $ref: '#/definitions/ProjectMetadata'
   Project:
     type: object
     properties:
@@ -2016,11 +2673,7 @@ definitions:
       owner_name:
         type: string
         description: The owner name of the project.
-      public:
-        type: integer
-        format: int
-        description: The public status of the project.
-      Togglable:
+      togglable:
         type: boolean
         description: >-
           Correspond to the UI about whether the project's publicity is 
@@ -2031,6 +2684,16 @@ definitions:
       repo_count:
         type: integer
         description: The number of the repositories under this project.
+      metadata:
+        description: The metadata of the project.
+        $ref: '#/definitions/ProjectMetadata'
+  ProjectMetadata:
+    type: object
+    properties:
+      public:
+        type: integer
+        format: int
+        description: The public status of the project.
       enable_content_trust:
         type: boolean
         description: >-
@@ -2226,33 +2889,35 @@ definitions:
         type: integer
         format: int64
         description: The policy ID.
-      project_id:
-        type: integer
-        format: int64
-        description: The project ID.
-      project_name:
-        type: string
-        description: The project name.
-      target_id:
-        type: integer
-        format: int64
-        description: The target ID.
       name:
         type: string
         description: The policy name.
-      enabled:
-        type: integer
-        format: int
-        description: The policy's enabled status.
       description:
         type: string
         description: The description of the policy.
-      cron_str:
-        type: string
-        description: The cron string for schedule job.
-      start_time:
-        type: string
-        description: The start time of the policy.
+      projects:
+        type: array
+        description: The project list that the policy applys to.
+        items:
+          $ref: '#/definitions/Project'
+      targets:
+        type: array
+        description: The target list.
+        items:
+          $ref: '#/definitions/RepTarget'
+      trigger:
+        $ref: '#/definitions/RepTrigger'
+      filters:
+        type: array
+        description: The replication policy filter array.
+        items:
+          $ref: '#/definitions/RepFilter'
+      replicate_existing_image_now:
+        type: boolean
+        description: Whether to replicate the existing images now.
+      replicate_deletion:
+        type: boolean
+        description: Whether to replicate the deletion operation.
       creation_time:
         type: string
         description: The create time of the policy.
@@ -2260,55 +2925,46 @@ definitions:
         type: string
         description: The update time of the policy.
       error_job_count:
-        format: int
+        type: integer
         description: The error job count number for the policy.
-      deleted:
-        type: integer
-  RepPolicyPost:
+  RepTrigger:
     type: object
     properties:
-      project_id:
-        type: integer
-        format: int64
-        description: The project ID.
-      target_id:
-        type: integer
-        format: int64
-        description: The target ID.
-      name:
+      kind:
         type: string
-        description: The policy name.
-      enabled:
-        type: integer
-        format: int
-        description: '1-enable, 0-disable'
-  RepPolicyUpdate:
+        description: >-
+          The replication policy trigger kind. The valid values are manual,
+          immediate and schedule.
+      schedule_param:
+        $ref: '#/definitions/ScheduleParam'
+  ScheduleParam:
     type: object
     properties:
-      target_id:
+      type:
+        type: string
+        description: The schedule type. The valid values are daily and weekly.
+      weekday:
+        type: integer
+        format: int8
+        description: 'Optional, only used when the type is weedly. The valid values are 1-7.'
+      offtime:
         type: integer
         format: int64
-        description: The target ID.
-      name:
-        type: string
-        description: The policy name.
-      enabled:
-        type: integer
-        format: int
-        description: The policy's enabled status.
-      description:
-        type: string
-        description: The description of the policy.
-      cron_str:
-        type: string
-        description: The cron string for schedule job.
-  RepPolicyEnablementReq:
+        description: 'The time offset with the UTC 00:00 in seconds.'
+  RepFilter:
     type: object
     properties:
-      enabled:
-        type: integer
-        format: int
-        description: The policy enablement flag.
+      kind:
+        type: string
+        description: >-
+          The replication policy filter kind. The valid values are project,
+          repository and tag.
+      pattern:
+        type: string
+        description: The replication policy filter pattern.
+      metadata:
+        type: object
+        description: This map object is the replication policy filter metadata.
   RepTarget:
     type: object
     properties:
@@ -2332,6 +2988,11 @@ definitions:
         type: integer
         format: int
         description: Reserved field.
+      insecure:
+        type: boolean
+        description: >-
+          Whether or not the certificate will be verified when Harbor tries to
+          access the server.
       creation_time:
         type: string
         description: The create time of the policy.
@@ -2353,9 +3014,18 @@ definitions:
       password:
         type: string
         description: The target server password.
+      insecure:
+        type: boolean
+        description: >-
+          Whether or not the certificate will be verified when Harbor tries to
+          access the server.
   PingTarget:
     type: object
     properties:
+      id:
+        type: integer
+        format: int
+        description: Target ID.
       endpoint:
         type: string
         description: The target address URL string.
@@ -2365,6 +3035,11 @@ definitions:
       password:
         type: string
         description: The target server password.
+      insecure:
+        type: boolean
+        description: >-
+          Whether or not the certificate will be verified when Harbor tries to
+          access the server.
   PutTarget:
     type: object
     properties:
@@ -2380,6 +3055,11 @@ definitions:
       password:
         type: string
         description: The target server password.
+      insecure:
+        type: boolean
+        description: >-
+          Whether or not the certificate will be verified when Harbor tries to
+          access the server.
   HasAdminRole:
     type: object
     properties:
@@ -2644,6 +3324,11 @@ definitions:
                 type: array
                 items:
                   $ref: '#/definitions/ComponentOverviewEntry'
+      labels:
+        type: array
+        description: The label list.
+        items:
+          $ref: '#/definitions/Label'
   ComponentOverviewEntry:
     type: object
     properties:
@@ -2657,7 +3342,7 @@ definitions:
     type: object
     properties:
       id:
-        type: string
+        type: integer
         description: The ID of repository.
       name:
         type: string
@@ -2677,6 +3362,11 @@ definitions:
       tags_count:
         type: integer
         description: The tags count of repository.
+      labels:
+        type: array
+        description: The label list.
+        items:
+          $ref: '#/definitions/Label'
       creation_time:
         type: string
         description: The creation time of repository.
@@ -2711,7 +3401,7 @@ definitions:
     properties:
       auth_mode:
         type: string
-        description: The auth mode of current system, such as "db_auth", "ldap_auth"
+        description: 'The auth mode of current system, such as "db_auth", "ldap_auth"'
       email_from:
         type: string
         description: The sender name for Email notification.
@@ -2729,10 +3419,15 @@ definitions:
         description: The username for authenticate against SMTP server.
       email_ssl:
         type: boolean
-        description: When it's set to true the system will access Email server via TLS by default.  If it's set to false, it still will handle "STARTTLS" from server side.
+        description: >-
+          When it's set to true the system will access Email server via TLS by
+          default.  If it's set to false, it still will handle "STARTTLS" from
+          server side.
       email_insecure:
         type: boolean
-        description: Whether or not the certificate will be verified when Harbor tries to access the email server.
+        description: >-
+          Whether or not the certificate will be verified when Harbor tries to
+          access the email server.
       ldap_url:
         type: string
         description: The URL of LDAP server.
@@ -2744,41 +3439,182 @@ definitions:
         description: The filter for LDAP binding.
       ldap_scope:
         type: integer
-        description: 1-LDAP_SCOPE_BASE, 2-LDAP_SCOPE_ONELEVEL, 3-LDAP_SCOPE_SUBTREE
+        description: '0-LDAP_SCOPE_BASE, 1-LDAP_SCOPE_ONELEVEL, 2-LDAP_SCOPE_SUBTREE'
       ldap_uid:
         type: string
-        description: The attribute which is used as identity for the LDAP binding, such as "CN" or "SAMAccountname"
+        description: >-
+          The attribute which is used as identity for the LDAP binding, such as
+          "CN" or "SAMAccountname"
       ldap_search_dn:
         type: string
         description: The DN of the user to do the search.
       ldap_timeout:
         type: integer
         description: timeout in seconds for connection to LDAP server.
+      ldap_group_attribute_name:
+        type: string
+        description: The attribute which is used as identity of the LDAP group, default is cn.
+      ldap_group_base_dn:
+        type: string
+        description: The base DN to search LDAP group.
+      ldap_group_search_filter:
+        type: string
+        description: The filter to search the ldap group.
+      ldap_group_search_scope:
+        type: integer
+        description: The scope to search ldap. '0-LDAP_SCOPE_BASE, 1-LDAP_SCOPE_ONELEVEL, 2-LDAP_SCOPE_SUBTREE'
       project_creation_restriction:
         type: string
-        description: This attribute restricts what users have the permission to create project.  It can be "everyone" or "adminonly".
+        description: >-
+          This attribute restricts what users have the permission to create
+          project.  It can be "everyone" or "adminonly".
+      read_only:
+        type: boolean
+        description: >-
+          'docker push' is prohibited by Harbor if you set it to true.   
       self_registration:
         type: boolean
-        description: Whether the Harbor instance supports self-registration.  If it's set to false, admin need to add user to the instance.
+        description: >-
+          Whether the Harbor instance supports self-registration.  If it's set
+          to false, admin need to add user to the instance.
       token_expiration:
         type: integer
-        description: The expiration time of the token for internal Registry, in minutes.
+        description: 'The expiration time of the token for internal Registry, in minutes.'
       verify_remote_cert:
         type: boolean
-        description: Whether or not the certificate will be verified when Harbor tries to access a remote Harbor instance for replication.
+        description: >-
+          Whether or not the certificate will be verified when Harbor tries to
+          access a remote Harbor instance for replication.
       scan_all_policy:
         type: object
         properties:
           type:
             type: string
-            description: The type of scan all policy, currently the valid values are "none" and "daily"
+            description: >-
+              The type of scan all policy, currently the valid values are "none"
+              and "daily"
           parameter:
             type: object
             properties:
               daily_time:
                 type: integer
-                description: The offest in seconds of UTC 0 o'clock, only valid when the policy type is "daily"
-            description: The parameters of the policy, the values are dependant on the type of the policy.
-          
-      
-    
+                description: >-
+                  The offest in seconds of UTC 0 o'clock, only valid when the
+                  policy type is "daily"
+            description: >-
+              The parameters of the policy, the values are dependant on the type
+              of the policy.
+  Replication:
+    type: object
+    properties:
+      policy_id:
+        type: integer
+        description: The ID of replication policy
+  RepositoryDescription:
+    type: object
+    properties:
+      description:
+        type: string
+        description: The description of the repository.
+  UpdateJobs:
+    type: object
+    properties:
+      policy_id:
+        type: integer
+        description: The ID of replication policy
+      status:
+        type: string
+        description: The status of jobs. The only valid value is stop for now.
+  Label:
+    type: object
+    properties:
+      id:
+        type: integer
+        description: The ID of label.
+      name:
+        type: string
+        description: The name of label.
+      description:
+        type: string
+        description: The description of label.
+      color:
+        type: string
+        description: The color of label.
+      scope:
+        type: integer
+        description: The scope of label, g for global labels and p for project labels.
+      project_id:
+        type: integer
+        description: The project ID if the label is a project label.
+      creation_time:
+        type: string
+        description: The creation time of label.
+      update_time:
+        type: string
+        description: The update time of label.
+  ProjectMemberEntity:
+    type: object
+    properties:
+      id:
+        type: integer
+        description: the project member id
+      project_id:
+        type: integer
+        description: the project id
+      entity_name:
+        type: string
+        description: the name of the group member. 
+      role_name:
+        type: string
+        description: the name of the role
+      role_id: 
+        type: integer
+        description: the role id
+      entity_id: 
+        type: integer
+        description: the id of entity, if the member is an user, it is user_id in user table. if the member is an user group, it is the user group's ID in user_group table.
+      entity_type:
+        type: string
+        description: the entity's type, u for user entity, g for group entity.
+  ProjectMember:
+    type: object
+    properties:
+      role_id:
+        type: integer
+        description: The role id 1 for projectAdmin, 2 for developer, 3 for guest
+      member_user:
+        $ref: '#/definitions/UserEntity'  
+      member_group:
+        $ref: '#/definitions/UserGroup'  
+  RoleRequest:
+    type: object
+    properties:
+      role_id:
+        type: integer
+        description: The role id 1 for projectAdmin, 2 for developer, 3 for guest
+  UserEntity:
+    type: object
+    properties:
+      user_id:
+        type: integer
+        description: The ID of the user.
+      username:
+        type: string
+        description: The name of the user.
+  UserGroup:
+    type: object
+    properties:
+      id:
+        type: integer
+        description: The ID of the user group
+      group_name:
+        type: string
+        description: The name of the user group
+      group_type: 
+        type: integer
+        description: The group type, 1 for LDAP group.
+      ldap_group_dn:
+        type: string
+        description: The DN of the LDAP group if group type is 1 (LDAP group).
+
+

@@ -20,28 +20,30 @@ import { SessionService } from '../../shared/session.service';
 import { ProjectService } from '../../project/project.service';
 
 import { RoleMapping } from '../../shared/shared.const';
+import {AppConfigService} from "../../app-config.service";
 
 @Component({
     selector: 'project-detail',
-    templateUrl: "project-detail.component.html",
-    styleUrls: [ 'project-detail.component.css' ]
+    templateUrl: 'project-detail.component.html',
+    styleUrls: [ 'project-detail.component.scss' ]
 })
 export class ProjectDetailComponent {
 
   hasSignedIn: boolean;
   currentProject: Project;
-  
+
   isMember: boolean;
   roleName: string;
 
   constructor(
-    private route: ActivatedRoute, 
+    private route: ActivatedRoute,
     private router: Router,
     private sessionService: SessionService,
+    private appConfigService: AppConfigService,
     private projectService: ProjectService) {
 
     this.hasSignedIn = this.sessionService.getCurrentUser() !== null;
-    this.route.data.subscribe(data=>{
+    this.route.data.subscribe(data => {
       this.currentProject = <Project>data['projectResolver'];
       this.isMember = this.currentProject.is_member;
       this.roleName = RoleMapping[this.currentProject.role_name];
@@ -50,11 +52,19 @@ export class ProjectDetailComponent {
 
   public get isSystemAdmin(): boolean {
     let account = this.sessionService.getCurrentUser();
-    return account != null && account.has_admin_role > 0;
+    return account && account.has_admin_role;
+  }
+
+  public get isSProjectAdmin(): boolean {
+    return this.currentProject.has_project_admin_role;
   }
 
   public get isSessionValid(): boolean {
     return this.sessionService.getCurrentUser() != null;
+  }
+
+  public get withAdmiral(): boolean {
+    return this.appConfigService.getConfig().with_admiral;
   }
 
   backToProject(): void {

@@ -19,10 +19,10 @@
   "password": "",
   "realname": "",
   "comment": "",
-  "deleted": 0,
+  "deleted": false,
   "role_name": "projectAdmin",
   "role_id": 1,
-  "has_admin_role": 0,
+  "has_admin_role": false,
   "reset_uuid": "",
   "creation_time": "0001-01-01T00:00:00Z",
   "update_time": "0001-01-01T00:00:00Z"
@@ -30,9 +30,11 @@
 */
 
 export class Member {
-  user_id: number;
-  username: string;
+  id: number;
+  project_id: number;
+  entity_name: string;
   role_name: string;
-  has_admin_role: number;
   role_id: number;
+  entity_id: number;
+  entity_type: string;
 }

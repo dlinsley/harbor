@@ -1,7 +1,5 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
 
-import { COPY_INPUT_HTML } from './copy-input.html';
-import { PUSH_IMAGE_STYLE } from './push-image.css';
 
 export const enum CopyStatus {
     NORMAL, SUCCESS, ERROR
@@ -9,21 +7,24 @@ export const enum CopyStatus {
 
 @Component({
     selector: 'hbr-copy-input',
-    styles: [PUSH_IMAGE_STYLE],
-    template: COPY_INPUT_HTML,
+    templateUrl: './copy-input.coponent.html',
+    styleUrls: ['./push-image.scss'],
 
     providers: []
 })
-export class CopyInputComponent {
+
+export class CopyInputComponent implements OnInit {
     @Input() inputSize: number = 40;
     @Input() headerTitle: string = "Copy Input";
     @Input() defaultValue: string = "N/A";
+    @Input() iconMode: boolean = false;
 
     state: CopyStatus = CopyStatus.NORMAL;
 
     @Output() onCopySuccess: EventEmitter<any> = new EventEmitter<any>();
     @Output() onCopyError: EventEmitter<any> = new EventEmitter<any>();
 
+    ngOnInit(): void { }
     onSuccess($event: any): void {
         this.state = CopyStatus.SUCCESS;
         this.onCopySuccess.emit($event);
@@ -36,6 +37,10 @@ export class CopyInputComponent {
 
     reset(): void {
         this.state = CopyStatus.NORMAL;
+    }
+
+    setPullCommendShow(): void {
+        this.iconMode = false;
     }
 
     public get isCopied(): boolean {

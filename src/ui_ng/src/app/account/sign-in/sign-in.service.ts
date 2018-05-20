@@ -12,43 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Injectable } from '@angular/core';
-import { Headers, Http, URLSearchParams } from '@angular/http';
+import { Http, URLSearchParams } from '@angular/http';
 import 'rxjs/add/operator/toPromise';
 
 import { SignInCredential } from '../../shared/sign-in-credential';
+import {HTTP_FORM_OPTIONS} from "../../shared/shared.utils";
 
 const signInUrl = '/login';
 /**
- * 
+ *
  * Define a service to provide sign in methods
- * 
+ *
  * @export
  * @class SignInService
  */
 @Injectable()
 export class SignInService {
-    headers = new Headers({
-        "Content-Type": 'application/x-www-form-urlencoded'
-    });
 
     constructor(private http: Http) {}
 
-    //Handle the related exceptions
-    handleError(error: any): Promise<any>{
+    // Handle the related exceptions
+    handleError(error: any): Promise<any> {
         return Promise.reject(error.message || error);
     }
 
-    //Submit signin form to backend (NOT restful service)
-    signIn(signInCredential: SignInCredential): Promise<any>{
-        //Build the form package
+    // Submit signin form to backend (NOT restful service)
+    signIn(signInCredential: SignInCredential): Promise<any> {
+        // Build the form package
         const body = new URLSearchParams();
         body.set('principal', signInCredential.principal);
         body.set('password', signInCredential.password);
 
-        //Trigger Http
-        return this.http.post(signInUrl, body.toString(), { headers: this.headers })
+        // Trigger Http
+        return this.http.post(signInUrl, body.toString(), HTTP_FORM_OPTIONS)
         .toPromise()
-        .then(()=>null)
+        .then(() => null)
         .catch(this.handleError);
     }
 }

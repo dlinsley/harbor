@@ -37,7 +37,7 @@ func TestSearch(t *testing.T) {
 		assert.Equal(int(200), httpStatusCode, "httpStatusCode should be 200")
 		assert.Equal(int64(1), result.Projects[0].ProjectID, "Project id should be equal")
 		assert.Equal("library", result.Projects[0].Name, "Project name should be library")
-		assert.Equal(1, result.Projects[0].Public, "Project public status should be 1 (true)")
+		assert.True(result.Projects[0].IsPublic(), "Project public status should be 1 (true)")
 	}
 
 	//--------case 2 : Response Code  = 200, sysAdmin and search repo--------//
@@ -48,8 +48,8 @@ func TestSearch(t *testing.T) {
 	} else {
 		assert.Equal(int(200), httpStatusCode, "httpStatusCode should be 200")
 		assert.Equal("library", result.Repositories[0].ProjectName, "Project name should be library")
-		assert.Equal("library/docker", result.Repositories[0].RepositoryName, "Repository  name should be library/docker")
-		assert.Equal(int32(1), result.Repositories[0].ProjectPublic, "Project public status should be 1 (true)")
+		assert.Equal("library/busybox", result.Repositories[0].RepositoryName, "Repository  name should be library/busybox")
+		assert.True(result.Repositories[0].ProjectPublic, "Project public status should be 1 (true)")
 	}
 
 	//--------case 3 : Response Code  = 200, normal user and search repo--------//
@@ -60,8 +60,8 @@ func TestSearch(t *testing.T) {
 	} else {
 		assert.Equal(int(200), httpStatusCode, "httpStatusCode should be 200")
 		assert.Equal("library", result.Repositories[0].ProjectName, "Project name should be library")
-		assert.Equal("library/docker", result.Repositories[0].RepositoryName, "Repository  name should be library/docker")
-		assert.Equal(int32(1), result.Repositories[0].ProjectPublic, "Project public status should be 1 (true)")
+		assert.Equal("library/busybox", result.Repositories[0].RepositoryName, "Repository  name should be library/busybox")
+		assert.True(result.Repositories[0].ProjectPublic, "Project public status should be 1 (true)")
 	}
 
 }

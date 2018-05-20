@@ -1,12 +1,9 @@
-import { NgModule, ModuleWithProviders, Provider, APP_INITIALIZER, Inject } from '@angular/core';
+import { NgModule, ModuleWithProviders, Provider, APP_INITIALIZER } from '@angular/core';
 
 import { LOG_DIRECTIVES } from './log/index';
 import { FILTER_DIRECTIVES } from './filter/index';
 import { ENDPOINT_DIRECTIVES } from './endpoint/index';
 import { REPOSITORY_DIRECTIVES } from './repository/index';
-import { REPOSITORY_STACKVIEW_DIRECTIVES } from './repository-stackview/index';
-
-import { LIST_REPOSITORY_DIRECTIVES } from './list-repository/index';
 import { TAG_DIRECTIVES } from './tag/index';
 
 import { REPLICATION_DIRECTIVES } from './replication/index';
@@ -24,6 +21,9 @@ import { VULNERABILITY_DIRECTIVES } from './vulnerability-scanning/index';
 import { PUSH_IMAGE_BUTTON_DIRECTIVES } from './push-image/index';
 import { CONFIGURATION_DIRECTIVES } from './config/index';
 import { JOB_LOG_VIEWER_DIRECTIVES } from './job-log-viewer/index';
+import { PROJECT_POLICY_CONFIG_DIRECTIVES } from './project-policy-config/index';
+import { HBR_GRIDVIEW_DIRECTIVES } from './gridview/index';
+import { REPOSITORY_GRIDVIEW_DIRECTIVES } from './repository-gridview/index';
 
 import {
   SystemInfoService,
@@ -43,7 +43,11 @@ import {
   ConfigurationService,
   ConfigurationDefaultService,
   JobLogService,
-  JobLogDefaultService
+  JobLogDefaultService,
+  ProjectService,
+  ProjectDefaultService,
+  LabelService,
+  LabelDefaultService
 } from './service/index';
 import {
   ErrorHandler,
@@ -55,6 +59,9 @@ import { TranslateModule } from '@ngx-translate/core';
 import { TranslateServiceInitializer } from './i18n/index';
 import { DEFAULT_LANG_COOKIE_KEY, DEFAULT_SUPPORTING_LANGS, DEFAULT_LANG } from './utils';
 import { ChannelService } from './channel/index';
+import {LABEL_DIRECTIVES} from "./label/index";
+import {CREATE_EDIT_LABEL_DIRECTIVES} from "./create-edit-label/index";
+import {LABEL_PIECE_DIRECTIVES} from "./label-piece/index";
 
 /**
  * Declare default service configuration; all the endpoints will be defined in
@@ -65,65 +72,73 @@ export const DefaultServiceConfig: IServiceConfig = {
   repositoryBaseEndpoint: "/api/repositories",
   logBaseEndpoint: "/api/logs",
   targetBaseEndpoint: "/api/targets",
+  replicationBaseEndpoint: "/api/replications",
   replicationRuleEndpoint: "/api/policies/replication",
   replicationJobEndpoint: "/api/jobs/replication",
   vulnerabilityScanningBaseEndpoint: "/api/repositories",
+  projectPolicyEndpoint: "/api/projects/configs",
+  projectBaseEndpoint: "/api/projects",
   enablei18Support: false,
-  defaultLang: DEFAULT_LANG,
   langCookieKey: DEFAULT_LANG_COOKIE_KEY,
   supportedLangs: DEFAULT_SUPPORTING_LANGS,
+  defaultLang: DEFAULT_LANG,
   langMessageLoader: "local",
   langMessagePathForHttpLoader: "i18n/langs/",
   langMessageFileSuffixForHttpLoader: "-lang.json",
   localI18nMessageVariableMap: {},
   configurationEndpoint: "/api/configurations",
-  scanJobEndpoint: "/api/jobs/scan"
+  scanJobEndpoint: "/api/jobs/scan",
+  labelEndpoint: "/api/labels"
 };
 
 /**
  * Define the configuration for harbor shareable module
- * 
+ *
  * @export
  * @interface HarborModuleConfig
  */
 export interface HarborModuleConfig {
-  //Service endpoints
-  config?: Provider,
+  // Service endpoints
+  config?: Provider;
 
-  //Handling error messages
-  errorHandler?: Provider,
+  // Handling error messages
+  errorHandler?: Provider;
 
-  //Service implementation for system info
-  systemInfoService?: Provider,
+  // Service implementation for system info
+  systemInfoService?: Provider;
 
-  //Service implementation for log
-  logService?: Provider,
+  // Service implementation for log
+  logService?: Provider;
 
-  //Service implementation for endpoint
-  endpointService?: Provider,
+  // Service implementation for endpoint
+  endpointService?: Provider;
 
-  //Service implementation for replication
-  replicationService?: Provider,
+  // Service implementation for replication
+  replicationService?: Provider;
 
-  //Service implementation for repository
-  repositoryService?: Provider,
+  // Service implementation for repository
+  repositoryService?: Provider;
 
-  //Service implementation for tag
-  tagService?: Provider,
+  // Service implementation for tag
+  tagService?: Provider;
 
-  //Service implementation for vulnerability scanning
-  scanningService?: Provider,
+  // Service implementation for vulnerability scanning
+  scanningService?: Provider;
 
-  //Service implementation for configuration
-  configService?: Provider,
+  // Service implementation for configuration
+  configService?: Provider;
 
-  //Service implementation for job log
-  jobLogService?: Provider
+  // Service implementation for job log
+  jobLogService?: Provider;
+
+  // Service implementation for project policy
+  projectPolicyService?: Provider;
+
+  // Service implementation for label
+  labelService?: Provider;
 }
 
 /**
- * 
- * 
  * @export
  * @param {AppConfigService} configService
  * @returns
@@ -149,28 +164,6 @@ export function initConfig(translateInitializer: TranslateServiceInitializer, co
     FILTER_DIRECTIVES,
     ENDPOINT_DIRECTIVES,
     REPOSITORY_DIRECTIVES,
-    REPOSITORY_STACKVIEW_DIRECTIVES,
-    LIST_REPOSITORY_DIRECTIVES,
-    TAG_DIRECTIVES,
-    CREATE_EDIT_ENDPOINT_DIRECTIVES,
-    CONFIRMATION_DIALOG_DIRECTIVES,
-    INLINE_ALERT_DIRECTIVES,
-    REPLICATION_DIRECTIVES,
-    LIST_REPLICATION_RULE_DIRECTIVES,
-    CREATE_EDIT_RULE_DIRECTIVES,
-    DATETIME_PICKER_DIRECTIVES,
-    VULNERABILITY_DIRECTIVES,
-    PUSH_IMAGE_BUTTON_DIRECTIVES,
-    CONFIGURATION_DIRECTIVES,
-    JOB_LOG_VIEWER_DIRECTIVES
-  ],
-  exports: [
-    LOG_DIRECTIVES,
-    FILTER_DIRECTIVES,
-    ENDPOINT_DIRECTIVES,
-    REPOSITORY_DIRECTIVES,
-    REPOSITORY_STACKVIEW_DIRECTIVES,
-    LIST_REPOSITORY_DIRECTIVES,
     TAG_DIRECTIVES,
     CREATE_EDIT_ENDPOINT_DIRECTIVES,
     CONFIRMATION_DIALOG_DIRECTIVES,
@@ -183,7 +176,37 @@ export function initConfig(translateInitializer: TranslateServiceInitializer, co
     PUSH_IMAGE_BUTTON_DIRECTIVES,
     CONFIGURATION_DIRECTIVES,
     JOB_LOG_VIEWER_DIRECTIVES,
-    TranslateModule
+    PROJECT_POLICY_CONFIG_DIRECTIVES,
+    LABEL_DIRECTIVES,
+    CREATE_EDIT_LABEL_DIRECTIVES,
+    LABEL_PIECE_DIRECTIVES,
+    HBR_GRIDVIEW_DIRECTIVES,
+    REPOSITORY_GRIDVIEW_DIRECTIVES,
+  ],
+  exports: [
+    LOG_DIRECTIVES,
+    FILTER_DIRECTIVES,
+    ENDPOINT_DIRECTIVES,
+    REPOSITORY_DIRECTIVES,
+    TAG_DIRECTIVES,
+    CREATE_EDIT_ENDPOINT_DIRECTIVES,
+    CONFIRMATION_DIALOG_DIRECTIVES,
+    INLINE_ALERT_DIRECTIVES,
+    REPLICATION_DIRECTIVES,
+    LIST_REPLICATION_RULE_DIRECTIVES,
+    CREATE_EDIT_RULE_DIRECTIVES,
+    DATETIME_PICKER_DIRECTIVES,
+    VULNERABILITY_DIRECTIVES,
+    PUSH_IMAGE_BUTTON_DIRECTIVES,
+    CONFIGURATION_DIRECTIVES,
+    JOB_LOG_VIEWER_DIRECTIVES,
+    TranslateModule,
+    PROJECT_POLICY_CONFIG_DIRECTIVES,
+    LABEL_DIRECTIVES,
+    CREATE_EDIT_LABEL_DIRECTIVES,
+    LABEL_PIECE_DIRECTIVES,
+    HBR_GRIDVIEW_DIRECTIVES,
+    REPOSITORY_GRIDVIEW_DIRECTIVES,
   ],
   providers: []
 })
@@ -204,7 +227,9 @@ export class HarborLibraryModule {
         config.scanningService || { provide: ScanningResultService, useClass: ScanningResultDefaultService },
         config.configService || { provide: ConfigurationService, useClass: ConfigurationDefaultService },
         config.jobLogService || { provide: JobLogService, useClass: JobLogDefaultService },
-        //Do initializing
+        config.projectPolicyService || { provide: ProjectService, useClass: ProjectDefaultService },
+        config.labelService || {provide: LabelService, useClass: LabelDefaultService},
+        // Do initializing
         TranslateServiceInitializer,
         {
           provide: APP_INITIALIZER,
@@ -232,6 +257,8 @@ export class HarborLibraryModule {
         config.scanningService || { provide: ScanningResultService, useClass: ScanningResultDefaultService },
         config.configService || { provide: ConfigurationService, useClass: ConfigurationDefaultService },
         config.jobLogService || { provide: JobLogService, useClass: JobLogDefaultService },
+        config.projectPolicyService || { provide: ProjectService, useClass: ProjectDefaultService },
+        config.labelService || {provide: LabelService, useClass: LabelDefaultService},
         ChannelService
       ]
     };

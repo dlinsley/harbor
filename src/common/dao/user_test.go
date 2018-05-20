@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/vmware/harbor/src/common/models"
 )
 
@@ -38,7 +39,7 @@ func TestDeleteUser(t *testing.T) {
 		t.Fatalf("failed to register user: %v", err)
 	}
 	defer func(id int64) {
-		if err := deleteUser(id); err != nil {
+		if err := CleanUser(id); err != nil {
 			t.Fatalf("failed to delete user %d: %v", id, err)
 		}
 	}(id)
@@ -49,13 +50,13 @@ func TestDeleteUser(t *testing.T) {
 	}
 
 	user := &models.User{}
-	sql := "select * from user where user_id = ?"
+	sql := "select * from harbor_user where user_id = ?"
 	if err = GetOrmer().Raw(sql, id).
 		QueryRow(user); err != nil {
 		t.Fatalf("failed to query user: %v", err)
 	}
 
-	if user.Deleted != 1 {
+	if user.Deleted != true {
 		t.Error("user is not deleted")
 	}
 
@@ -72,10 +73,20 @@ func TestDeleteUser(t *testing.T) {
 	}
 }
 
-func deleteUser(id int64) error {
-	if _, err := GetOrmer().QueryTable(&models.User{}).
-		Filter("UserID", id).Delete(); err != nil {
-		return err
+func TestOnBoardUser(t *testing.T) {
+	assert := assert.New(t)
+	u := &models.User{
+		Username: "user1",
+		Password: "password1",
+		Email:    "dummy@placehodler.com",
+		Realname: "daniel",
 	}
-	return nil
+	err := OnBoardUser(u)
+	assert.Nil(err)
+	id := u.UserID
+	assert.True(id > 0)
+	err = OnBoardUser(u)
+	assert.Nil(err)
+	assert.True(u.UserID == id)
+	CleanUser(int64(id))
 }

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/vmware/harbor/src/common/dao"
+	"github.com/vmware/harbor/src/common/dao/group"
 	"github.com/vmware/harbor/src/common/models"
 	"github.com/vmware/harbor/src/common/utils"
 	errutil "github.com/vmware/harbor/src/common/utils/error"
@@ -27,7 +28,7 @@ import (
 	"github.com/vmware/harbor/src/ui/promgr/pmsdriver"
 )
 
-const dupProjectPattern = `Duplicate entry '\w+' for key 'name'`
+const dupProjectPattern = `duplicate key value violates unique constraint \"project_name_key\"`
 
 type driver struct {
 }
@@ -82,7 +83,6 @@ func (d *driver) Create(project *models.Project) (int64, error) {
 	t := time.Now()
 	pro := &models.Project{
 		Name:         project.Name,
-		Public:       project.Public,
 		OwnerID:      project.OwnerID,
 		CreationTime: t,
 		UpdateTime:   t,
@@ -118,7 +118,6 @@ func (d *driver) Delete(projectIDOrName interface{}) error {
 		}
 		id = project.ProjectID
 	}
-
 	return dao.DeleteProject(id)
 }
 
@@ -129,19 +128,27 @@ func (d *driver) Update(projectIDOrName interface{},
 	return nil
 }
 
-// TODO remove base
 // List returns a project list according to the query parameters
-func (d *driver) List(query *models.ProjectQueryParam,
-	base ...*models.BaseProjectCollection) (
-	*models.ProjectQueryResult, error) {
-	total, err := dao.GetTotalOfProjects(query, base...)
+func (d *driver) List(query *models.ProjectQueryParam) (*models.ProjectQueryResult, error) {
+	var total int64
+	var projects []*models.Project
+	var groupDNCondition string
+
+	//List with LDAP group projects
+	if query != nil && query.Member != nil {
+		groupDNCondition = group.GetGroupDNQueryCondition(query.Member.GroupList)
+	}
+
+	count, err := dao.GetTotalGroupProjects(groupDNCondition, query)
 	if err != nil {
 		return nil, err
 	}
-	projects, err := dao.GetProjects(query, base...)
+	total = int64(count)
+	projects, err = dao.GetGroupProjects(groupDNCondition, query)
 	if err != nil {
 		return nil, err
 	}
+
 	return &models.ProjectQueryResult{
 		Total:    total,
 		Projects: projects,

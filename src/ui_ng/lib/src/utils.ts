@@ -7,7 +7,7 @@ import { Comparator, State } from 'clarity-angular';
 
 /**
  * Convert the different async channels to the Promise<T> type.
- * 
+ *
  * @export
  * @template T
  * @param {(Observable<T> | Promise<T> | T)} async
@@ -34,7 +34,7 @@ export const DEFAULT_LANG_COOKIE_KEY = 'harbor-lang';
 /**
  * Declare what languages are supported now.
  */
-export const DEFAULT_SUPPORTING_LANGS = ['en-us', 'zh-cn', 'es-es'];
+export const DEFAULT_SUPPORTING_LANGS = ['en-us', 'zh-cn', 'es-es', 'fr-fr'];
 
 /**
  * The default language.
@@ -48,9 +48,18 @@ export const HTTP_JSON_OPTIONS: RequestOptions = new RequestOptions({
     })
 });
 
+export const HTTP_GET_OPTIONS: RequestOptions = new RequestOptions({
+    headers: new Headers({
+        "Content-Type": 'application/json',
+        "Accept": 'application/json',
+        "Cache-Control": 'no-cache',
+        "Pragma": 'no-cache'
+    })
+});
+
 /**
  * Build http request options
- * 
+ *
  * @export
  * @param {RequestQueryParams} params
  * @returns {RequestOptions}
@@ -59,7 +68,9 @@ export function buildHttpRequestOptions(params: RequestQueryParams): RequestOpti
     let reqOptions: RequestOptions = new RequestOptions({
         headers: new Headers({
             "Content-Type": 'application/json',
-            "Accept": 'application/json'
+            "Accept": 'application/json',
+            "Cache-Control": 'no-cache',
+            "Pragma": 'no-cache'
         })
     });
 
@@ -90,7 +101,7 @@ export function click(el: DebugElement | HTMLElement, eventObj: any = ButtonClic
 
 /**
  * Comparator for fields with specific type.
- *  
+ *
  */
 export class CustomComparator<T> implements Comparator<T> {
 
@@ -150,10 +161,10 @@ export function calculatePage(state: State): number {
 
 /**
  * Filter columns via RegExp
- * 
+ *
  * @export
- * @param {State} state 
- * @returns {void} 
+ * @param {State} state
+ * @returns {void}
  */
 export function doFiltering<T extends { [key: string]: any | any[] }>(items: T[], state: State): T[] {
     if (!items || items.length === 0) {
@@ -168,7 +179,18 @@ export function doFiltering<T extends { [key: string]: any | any[] }>(items: T[]
         property: string;
         value: string;
     }) => {
-        items = items.filter(item => regexpFilter(filter["value"], item[filter["property"]]));
+        items = items.filter(item => {
+            if (filter['property'].indexOf('.') !== -1) {
+                let arr = filter['property'].split('.');
+                if (Array.isArray(item[arr[0]]) && item[arr[0]].length) {
+                     return item[arr[0]].some((data: any) => {
+                         return filter['value'] === data[arr[1]];
+                    });
+                }
+            }else {
+                return regexpFilter(filter['value'], item[filter['property']]);
+            }
+        });
     });
 
     return items;
@@ -176,11 +198,11 @@ export function doFiltering<T extends { [key: string]: any | any[] }>(items: T[]
 
 /**
  * Match items via RegExp
- * 
+ *
  * @export
- * @param {string} terms 
- * @param {*} testedValue 
- * @returns {boolean} 
+ * @param {string} terms
+ * @param {*} testedValue
+ * @returns {boolean}
  */
 export function regexpFilter(terms: string, testedValue: any): boolean {
     let reg = new RegExp('.*' + terms + '.*', 'i');
@@ -189,12 +211,12 @@ export function regexpFilter(terms: string, testedValue: any): boolean {
 
 /**
  * Sorting the data by column
- * 
+ *
  * @export
- * @template T 
- * @param {T[]} items 
- * @param {State} state 
- * @returns {T[]} 
+ * @template T
+ * @param {T[]} items
+ * @param {State} state
+ * @returns {T[]}
  */
 export function doSorting<T extends { [key: string]: any | any[] }>(items: T[], state: State): T[] {
     if (!items || items.length === 0) {
@@ -231,25 +253,25 @@ export function doSorting<T extends { [key: string]: any | any[] }>(items: T[], 
 
 /**
  * Compare the two objects to adjust if they're equal
- * 
+ *
  * @export
- * @param {*} a 
- * @param {*} b 
- * @returns {boolean} 
+ * @param {*} a
+ * @param {*} b
+ * @returns {boolean}
  */
 export function compareValue(a: any, b: any): boolean {
-    if ((a && !b) || (!a && b)) return false;
-    if (!a && !b) return true;
+    if ((a && !b) || (!a && b)) { return false; };
+    if (!a && !b) { return true; } ;
 
     return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**
  * Check if the object is null or empty '{}'
- * 
+ *
  * @export
- * @param {*} obj 
- * @returns {boolean} 
+ * @param {*} obj
+ * @returns {boolean}
  */
 export function isEmptyObject(obj: any): boolean {
     return !obj || JSON.stringify(obj) === "{}";
@@ -257,12 +279,12 @@ export function isEmptyObject(obj: any): boolean {
 
 /**
  * Deeper clone all
- * 
+ *
  * @export
- * @param {*} srcObj 
- * @returns {*} 
+ * @param {*} srcObj
+ * @returns {*}
  */
 export function clone(srcObj: any): any {
-    if (!srcObj) return null;
+    if (!srcObj) { return null; };
     return JSON.parse(JSON.stringify(srcObj));
 }

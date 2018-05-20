@@ -17,6 +17,7 @@ package dao
 import (
 	"github.com/astaxie/beego/orm"
 	"github.com/vmware/harbor/src/common/models"
+	"github.com/vmware/harbor/src/common/utils/log"
 
 	"encoding/json"
 	"fmt"
@@ -78,9 +79,24 @@ func UpdateScanJobStatus(id int64, status string) error {
 	}
 	n, err := o.Update(&sj, "Status", "UpdateTime")
 	if n == 0 {
-		return fmt.Errorf("Failed to update scan job with id: %d, error: %v", id, err)
+		log.Warningf("no records are updated when updating scan job %d", id)
 	}
 	return err
+}
+
+// SetScanJobUUID set UUID to the record so it associates with the job in job service.
+func SetScanJobUUID(id int64, uuid string) error {
+	o := GetOrmer()
+	sj := models.ScanJob{
+		ID:   id,
+		UUID: uuid,
+	}
+	n, err := o.Update(&sj, "UUID")
+	if n == 0 {
+		log.Warningf("no records are updated when updating scan job %d", id)
+	}
+	return err
+
 }
 
 func scanJobQs(limit ...int) orm.QuerySeter {
@@ -109,8 +125,9 @@ func SetScanJobForImg(digest string, jobID int64) error {
 		rec.UpdateTime = time.Now()
 		n, err := o.Update(rec, "JobID", "UpdateTime")
 		if n == 0 {
-			return fmt.Errorf("Failed to set scan job for image with digest: %s, error: %v", digest, err)
+			log.Warningf("no records are updated when setting scan job for image with digest %s", digest)
 		}
+		return err
 	}
 	return nil
 }
@@ -165,7 +182,7 @@ func UpdateImgScanOverview(digest, detailsKey string, sev models.Severity, compO
 	return nil
 }
 
-// ListImgScanOverviews list all records in table img_scan_overview, it is called in notificaiton handler when it needs to refresh the severity of all images.
+// ListImgScanOverviews list all records in table img_scan_overview, it is called in notification handler when it needs to refresh the severity of all images.
 func ListImgScanOverviews() ([]*models.ImgScanOverview, error) {
 	var res []*models.ImgScanOverview
 	o := GetOrmer()

@@ -1,8 +1,5 @@
-import { async, ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
-import { HttpModule } from '@angular/http';
+import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { DebugElement } from '@angular/core';
-import { Observable } from 'rxjs/Observable';
 import { AccessLog, AccessLogItem, RequestQueryParams } from '../service/index';
 
 import { RecentLogComponent } from './recent-log.component';
@@ -58,7 +55,7 @@ describe('RecentLogComponent (inline template)', () => {
     serviceConfig = TestBed.get(SERVICE_CONFIG);
     logService = fixture.debugElement.injector.get(AccessLogService);
 
-    //Mock data
+    // Mock data
     for (let i = 0; i < 18; i++) {
       let item: AccessLogItem = {
         log_id: 23 + i,
@@ -77,13 +74,13 @@ describe('RecentLogComponent (inline template)', () => {
 
     spy = spyOn(logService, 'getRecentLogs')
       .and.callFake(function (params: RequestQueryParams) {
-        if (params && params.get('repository')) {
+        if (params && params.get('username')) {
           return Promise.resolve(mockData2);
         } else {
-          if (params.get('page') == '1') {
+          if (params.get('page') === '1') {
             mockData.data = mockItems.slice(0, 15);
           } else {
-            mockData.data = mockItems.slice(15, 18)
+            mockData.data = mockItems.slice(15, 18);
           }
           return Promise.resolve(mockData);
         }
@@ -194,7 +191,7 @@ describe('RecentLogComponent (inline template)', () => {
 
         let els: HTMLElement[] = fixture.nativeElement.querySelectorAll('.datagrid-row');
         expect(els).toBeTruthy();
-        expect(els.length).toEqual(4)
+        expect(els.length).toEqual(4);
 
         let refreshEl: HTMLElement = fixture.nativeElement.querySelector(".refresh-btn");
         expect(refreshEl).toBeTruthy("Not found refresh button");
@@ -205,7 +202,7 @@ describe('RecentLogComponent (inline template)', () => {
         fixture.whenStable().then(() => {
           fixture.detectChanges();
 
-          let els: HTMLElement[] = fixture.nativeElement.querySelectorAll('.datagrid-row');
+          els = fixture.nativeElement.querySelectorAll('.datagrid-row');
           expect(els).toBeTruthy();
           expect(els.length).toEqual(16);
         });

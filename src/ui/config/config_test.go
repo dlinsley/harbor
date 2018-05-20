@@ -15,21 +15,30 @@ package config
 
 import (
 	"os"
+	"path"
+	"runtime"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/vmware/harbor/src/common"
 	"github.com/vmware/harbor/src/common/utils/test"
 )
 
 // test functions under package ui/config
 func TestConfig(t *testing.T) {
-	server, err := test.NewAdminserver(nil)
+
+	defaultCACertPath = path.Join(currPath(), "test", "ca.crt")
+	c := map[string]interface{}{
+		common.AdmiralEndpoint: "http://www.vmware.com",
+	}
+	server, err := test.NewAdminserver(c)
 	if err != nil {
 		t.Fatalf("failed to create a mock admin server: %v", err)
 	}
 	defer server.Close()
 
-	if err := os.Setenv("ADMIN_SERVER_URL", server.URL); err != nil {
-		t.Fatalf("failed to set env %s: %v", "ADMIN_SERVER_URL", err)
+	if err := os.Setenv("ADMINSERVER_URL", server.URL); err != nil {
+		t.Fatalf("failed to set env %s: %v", "ADMINSERVER_URL", err)
 	}
 
 	secretKeyPath := "/tmp/secretkey"
@@ -39,6 +48,7 @@ func TestConfig(t *testing.T) {
 		return
 	}
 	defer os.Remove(secretKeyPath)
+	assert := assert.New(t)
 
 	if err := os.Setenv("KEY_PATH", secretKeyPath); err != nil {
 		t.Fatalf("failed to set env %s: %v", "KEY_PATH", err)
@@ -68,8 +78,12 @@ func TestConfig(t *testing.T) {
 		t.Errorf("unexpected mode: %s != %s", mode, "db_auth")
 	}
 
-	if _, err := LDAP(); err != nil {
+	if _, err := LDAPConf(); err != nil {
 		t.Fatalf("failed to get ldap settings: %v", err)
+	}
+
+	if _, err := LDAPGroupConf(); err != nil {
+		t.Fatalf("failed to get ldap group settings: %v", err)
 	}
 
 	if _, err := TokenExpiration(); err != nil {
@@ -108,10 +122,6 @@ func TestConfig(t *testing.T) {
 		t.Fatalf("failed to get onldy admin create project: %v", err)
 	}
 
-	if _, err := VerifyRemoteCert(); err != nil {
-		t.Fatalf("failed to get verify remote cert: %v", err)
-	}
-
 	if _, err := Email(); err != nil {
 		t.Fatalf("failed to get email settings: %v", err)
 	}
@@ -119,6 +129,18 @@ func TestConfig(t *testing.T) {
 	if _, err := Database(); err != nil {
 		t.Fatalf("failed to get database: %v", err)
 	}
+
+	clairDB, err := ClairDB()
+	if err != nil {
+		t.Fatalf("failed to get clair DB %v", err)
+	}
+	adminServerDefaultConfig := test.GetDefaultConfigMap()
+	assert.Equal(adminServerDefaultConfig[common.ClairDB], clairDB.Database)
+	assert.Equal(adminServerDefaultConfig[common.ClairDBUsername], clairDB.Username)
+	assert.Equal(adminServerDefaultConfig[common.ClairDBPassword], clairDB.Password)
+	assert.Equal(adminServerDefaultConfig[common.ClairDBHost], clairDB.Host)
+	assert.Equal(adminServerDefaultConfig[common.ClairDBPort], clairDB.Port)
+
 	if InternalNotaryEndpoint() != "http://notary-server:4443" {
 		t.Errorf("Unexpected notary endpoint: %s", InternalNotaryEndpoint())
 	}
@@ -130,6 +152,9 @@ func TestConfig(t *testing.T) {
 	}
 	if !WithAdmiral() {
 		t.Errorf("WithAdmiral should be true")
+	}
+	if ReadOnly() {
+		t.Errorf("ReadOnly should be false")
 	}
 	if AdmiralEndpoint() != "http://www.vmware.com" {
 		t.Errorf("Unexpected admiral endpoint: %s", AdmiralEndpoint())
@@ -160,4 +185,27 @@ func TestConfig(t *testing.T) {
 		t.Errorf("unexpected scan all policy %v", s)
 	}
 
+	if tokenKeyPath := TokenPrivateKeyPath(); tokenKeyPath != "/etc/ui/private_key.pem" {
+		t.Errorf("Unexpected token private key path: %s, expected: %s", tokenKeyPath, "/etc/ui/private_key.pem")
+	}
+
+	us, err := UAASettings()
+	if err != nil {
+		t.Fatalf("failed to get UAA setting, error: %v", err)
+	}
+
+	if us.ClientID != "testid" || us.ClientSecret != "testsecret" || us.Endpoint != "10.192.168.5" || us.VerifyCert {
+		t.Errorf("Unexpected UAA setting: %+v", *us)
+	}
+	assert.Equal("http://myjob:8888", InternalJobServiceURL())
+	assert.Equal("http://myui:8888/service/token", InternalTokenServiceEndpoint())
+
+}
+
+func currPath() string {
+	_, f, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("Failed to get current directory")
+	}
+	return path.Dir(f)
 }

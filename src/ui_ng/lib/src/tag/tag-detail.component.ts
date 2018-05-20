@@ -1,16 +1,14 @@
 import { Component, Input, Output, EventEmitter, OnInit } from '@angular/core';
 
-import { TAG_DETAIL_STYLES } from './tag-detail.component.css';
-import { TAG_DETAIL_HTML } from './tag-detail.component.html';
-
 import { TagService, Tag, VulnerabilitySeverity } from '../service/index';
 import { toPromise } from '../utils';
 import { ErrorHandler } from '../error-handler/index';
+import {Label} from "../service/interface";
 
 @Component({
     selector: 'hbr-tag-detail',
-    styles: [TAG_DETAIL_STYLES],
-    template: TAG_DETAIL_HTML,
+    templateUrl: './tag-detail.component.html',
+    styleUrls: ['./tag-detail.component.scss'],
 
     providers: []
 })
@@ -19,9 +17,12 @@ export class TagDetailComponent implements OnInit {
     _mediumCount: number = 0;
     _lowCount: number = 0;
     _unknownCount: number = 0;
+    labels: Label;
 
     @Input() tagId: string;
     @Input() repositoryId: string;
+    @Input() withAdmiral: boolean;
+    @Input() withClair: boolean;
     tagDetails: Tag = {
         name: "--",
         size: "--",
@@ -30,7 +31,8 @@ export class TagDetailComponent implements OnInit {
         architecture: "--",
         os: "--",
         docker_version: "--",
-        digest: "--"
+        digest: "--",
+        labels: [],
     };
 
     @Output() backEvt: EventEmitter<any> = new EventEmitter<any>();
@@ -68,12 +70,12 @@ export class TagDetailComponent implements OnInit {
                         });
                     }
                 })
-                .catch(error => this.errorHandler.error(error))
+                .catch(error => this.errorHandler.error(error));
         }
     }
 
     onBack(): void {
-        this.backEvt.emit(this.tagId);
+        this.backEvt.emit(this.repositoryId);
     }
 
     getPackageText(count: number): string {

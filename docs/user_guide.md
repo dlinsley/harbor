@@ -2,20 +2,26 @@
 ## Overview  
 This guide walks you through the fundamentals of using Harbor. You'll learn how to use Harbor to:  
 
-* Manage your projects.
-* Manage members of a project.
-* Replicate projects to a remote registry.
-* Search projects and repositories.
-* Manage Harbor system if you are the system administrator:
-  * Manage users.
-  * Manage destinations.
-  * Manage replication policies.
-  * Manage configuration.
-* Pull and push images using Docker client.
-* Delete repositories and images.
-* Content trust.  
-* Vulnerability scanning via Clair.
-* Pull image from Harbor in Kubernetes.
+* [Manage your projects.](#managing-projects)
+* [Manage members of a project.](#managing-members-of-a-project)
+* [Replicate projects to a remote registry.](#replicating-images)
+* [Search projects and repositories.](#searching-projects-and-repositories)
+* [Manage labels.](#managing-labels)
+* [Manage Harbor system if you are the system administrator:](#administrator-options)
+  * [Manage users.](#managing-user)
+  * [Manage endpoints.](#managing-endpoint)
+  * [Manage replication policies.](#managing-replication)
+  * [Manage authentication.](#managing-authentication)
+  * [Manage project creation.](#managing-project-creation)
+  * [Manage self-registration.](#managing-self-registration)
+  * [Manage email settings.](#managing-email-settings)
+  * [Manage registry read only.](#managing-registry-read-only)
+* [Pull and push images using Docker client.](#pulling-and-pushing-images-using-docker-client)
+* [Add description to repositories](#add-description-to-repositories)
+* [Delete repositories and images.](#deleting-repositories)
+* [Content trust.  ](#content-trust)
+* [Vulnerability scanning via Clair.](#vulnerability-scanning-via-clair)
+* [Pull image from Harbor in Kubernetes.](#pull-image-from-harbor-in-kubernetes)
 
 ## Role Based Access Control(RBAC)  
 
@@ -31,6 +37,8 @@ Besides the above three roles, there are two system-wide roles:
 
 * **SysAdmin**: "SysAdmin" has the most privileges. In addition to the privileges mentioned above, "SysAdmin" can also list all projects, set an ordinary user as administrator, delete users and set vulnerability scan policy for all images. The public project "library" is also owned by the administrator.  
 * **Anonymous**: When a user is not logged in, the user is considered as an "Anonymous" user. An anonymous user has no access to private projects and has read-only access to public projects.  
+
+**Video demo:** ![RBAC](img/demos/rbac.png) [youtube](https://www.youtube.com/watch?v=2ZIu9XTvsC0) , [Tencent Video](https://v.qq.com/x/page/l0553yw19ek.html)
 
 ## User account
 Harbor supports two authentication modes:  
@@ -54,9 +62,9 @@ Harbor supports two authentication modes:
 
 	Under this authentication mode, users whose credentials are stored in an external LDAP or AD server can log in to Harbor directly.  
 	
-	When an LDAP/AD user logs in by *username* and *password*, Harbor binds to the LDAP/AD server with the **"LDAP Search DN"** and **"LDAP Search Password"** described in [installation guide](installation_guide.md). If it succeeded, Harbor looks up the user under the LDAP entry **"LDAP Base DN"** including substree. The attribute (such as uid, cn) specified by **"LDAP UID"** is used to match a user with the *username*. If a match is found, the user's *password* is verified by a bind request to the LDAP/AD server.  
+	When an LDAP/AD user logs in by *username* and *password*, Harbor binds to the LDAP/AD server with the **"LDAP Search DN"** and **"LDAP Search Password"** described in [installation guide](installation_guide.md). If it succeeded, Harbor looks up the user under the LDAP entry **"LDAP Base DN"** including substree. The attribute (such as uid, cn) specified by **"LDAP UID"** is used to match a user with the *username*. If a match is found, the user's *password* is verified by a bind request to the LDAP/AD server. Uncheck **"LDAP Verify Cert"** if the LDAP/AD server uses a self-signed or an untrusted certificate.
 	
-	Self-registration, changing password and resetting password are not supported under LDAP/AD authentication mode because the users are managed by LDAP or AD.  
+	Self-registration, deleting user, changing password and resetting password are not supported under LDAP/AD authentication mode because the users are managed by LDAP or AD.  
 
 ## Managing projects
 A project in Harbor contains all repositories of an application. No images can be pushed to Harbor before the project is created. RBAC is applied to a project. There are two types of projects in Harbor:  
@@ -68,64 +76,137 @@ You can create a project after you signed in. Check on the "Access Level" checkb
 
 ![create project](img/new_create_project.png)  
 
-After the project is created, you can browse repositories, users and logs using the navigation tab.  
+After the project is created, you can browse repositories, members, logs, replication and configuration using the navigation tab.
 
-![browse project](img/new_browse_project.png)  
+![browse project](img/new_browse_project.png)
+
+There are two views to show repositories, listview, and cardview, you can switch between them by click correspond icon.
+
+![browse repositories](img/browse_project_repositories.png)
 
 All logs can be listed by clicking "Logs". You can apply a filter by username, or operations and dates under "Advanced Search".  
 
+![browse project](img/log_search_advanced.png)
+
 ![browse project](img/new_project_log.png)  
+
+Project properties can be changed by clicking "Configuration".
+
+* To make all repositories under the project accessible to everyone, select the `Public` checkbox.
+
+* To prevent un-signed images under the project from being pulled, select the `Enable content trust` checkbox.
+
+* To prevent vulnerable images under the project from being pulled, select the `Prevent vulnerable images from running` checkbox and change the severity level of vulnerabilities. Images cannot be pulled if their level equals to or higher than the currently selected level.
+
+* To activate an immediate vulnerability scan on new images that are pushed to the project, select the `Automatically scan images on push` checkbox.
+
+![browse project](img/project_configuration.png) 
 
 ## Managing members of a project  
 ### Adding members  
-You can add members with different roles to an existing project.  
+You can add members with different roles to an existing project. You can add a LDAP/AD user to project members under LDAP/AD authentication mode. 
 
 ![browse project](img/new_add_member.png)
 
 ### Updating and removing members
-You can update or remove a member by clicking the icon on the left.  
+You can check one or more members, then click `MEMBER ACTION`, choose one role to batch switch checked members's roles. You can also click `MEMBER.REMOVE` to batch remove checked members.
 
 ![browse project](img/new_remove_update_member.png)
 
 ## Replicating images  
-Images replication is used to replicate repositories from one Harbor instance to another.  
+Images replication is used to replicate repositories from one Harbor instance to another.
 
-The function is project-oriented, and once the system administrator set a rule to one project, all repositories under the project will be replicated to the remote registry. Each repository will start a job to run. If the project does not exist on the remote registry, a new project will be created automatically, but if it already exists and the user configured in policy has no write privilege to it, the process will fail. When a new repository is pushed to this project or an existing repository is deleted from this project, the same operation will also be replicated to the destination. The member information will not be replicated.  
+The function is project-oriented, and once the system administrator set a rule to one project, all repositories under the project that match the defined [filter](#image-filter) patterns will be replicated to the remote registry when the [triggering condition](#trigger-mode) is triggered. Each repository will start a job to run. If the project does not exist on the remote registry, a new project will be created automatically, but if it already exists and the user configured in policy has no write privilege to it, the process will fail. The member information will not be replicated.  
 
-There may be a bit of delay during replication according to the situation of the network. If replication job fails due to the network issue, the job will be re-scheduled a few minutes later.  
+There may be a bit of delay during replication according to the situation of the network. If replication job fails due to the network issue, the job will be re-scheduled a few minutes later and the schedule will keep trying until the network issue resolved.  
 
-**Note:** The replication feature is incompatible between Harbor instance before version 0.3.5(included) and after version 0.3.5.  	
+**Note:** The replication feature is incompatible between Harbor instance before version 0.3.5(included) and after version 0.3.5. 
 
-Start replication by creating a rule. Click "Add Replication Rule" on the "Replication" tab, fill in the necessary fields, if there is no endpoint in the list, you need to create one, and then click "OK", a rule for this project will be created. If  "Enable" is chosen, the project will be replicated to the remote immediately.  
+### Creating a replication rule
+Replication can be configured by creating a rule. Click `NEW REPLICATION RULE` under `Administration->Replications` and fill in the necessary fields. You can choose different image filters and trigger modes according to the different requirements. If there is no endpoint available in the list, you need to create one. Click `SAVE` to create a replication rule for the selected project. If `Replicate existing images immediately` is chosen, the existing images under the project will be replicated to the remote registry immediately.  
 
-![browse project](img/new_create_rule.png)
+#### Image filter
+Two image filters are supported:
+* **Repository**: Filter images according to the repository part of image name.
+* **Tag**: Filter images according to the tag part of image name.
 
-You can enable, disable or delete a rule in the rule list view. Only rules which are disabled can be edited and only rules which are disabled and have no running jobs can be deleted. If a rule is disabled, the running jobs under it will be stopped.  
+Two terms are supported in filter pattern:
+* **\***: Matches any sequence of non-separator characters `/`.
+* **?**: Matches any single non-separator character `/`.
 
-Click a rule, jobs which belong to this rule will be listed. A job represents the progress of replicating the repository to the remote instance.  
+#### Trigger mode
+* **Manual**: Replicate the repositories manually when needed. **Note**: The deletion operations are not replicated. 
+* **Immediate**: When a new repository is pushed to the project, it is replicated to the remote registry immediately. Same to the deletion operation if the `Delete remote images when locally deleted` checkbox is selected.
+* **Scheduled**: Replicate the repositories daily or weekly. **Note**: The deletion operations are not replicated. 
 
-![browse project](img/new_rule_list.png)
+![browse project](img/create_rule.png)
+
+### Listing and stopping replication jobs
+Click a rule, jobs which belong to this rule will be listed. A job represents the progress of replicating the repository to the remote instance. Click `STOP JOBS`, the pending and retrying jobs will be stopped immediately and the running jobs will be canceled at the next checkpoint.  
+
+![browse project](img/list_stop_jobs.png)
+
+### Starting a replication manually
+Select a replication rule and click `REPLICATE`, the images under the project which the rule is applied to will be replicated to the remote registry immediately. If there is any pending/running job that belongs to the rule, the new replication will not be started.
+
+![browse project](img/start_replicate.png)
+
+### Deleting the replication rule
+Select the replication rule and click `DELETE` to delete it. Only rules which have no pending/running/retrying jobs can be deleted.  
+
+![browse project](img/delete_rule.png)
+
+
+The system administrator can also operate the replication rules defined for the specified project in `Replication` tab under `Projects` view. Project administrator has read-only privilege.
+
+![browse project](img/rule_under_project_view.png)
+
 
 ## Searching projects and repositories  
 Entering a keyword in the search field at the top lists all matching projects and repositories. The search result includes both public and private repositories you have access to.  
 
 ![browse project](img/new_search.png)
 
+## Managing labels
+Harbor provides two kinds of labels to isolate kinds of resources(only images for now):
+* **Global Level Label**: Managed by system administrators and used to manage the images of the whole system. They can be added to images under any projects.
+* **Project Level Label**: Managed by project administrators under a project and can only be added to the images of the project.
+
+### Managing global level labels
+The system administrators can list, create, update and delete the global level labels under `Administration->Configuration->Labels`:
+
+![manage global level labels](img/manage_global_level_labels.png)
+
+### Managing project level labels
+The project administrators and system administrators can list, create, update and delete the project level labels under `Labels` tab of the project detail page:
+
+![manage project level labels](img/manage_project_level_labels.png)
+
+### Adding labels to/remove labels from images
+Users who have system administrator, project administrator or project developer role can click the `ADD LABELS` button to add labels to or remove labels from images. The label list contains both globel level labels(come first) and project level labels:
+
+![add labels to images](img/add_labels_to_images.png)
+
+### Filtering images by labels
+The images can be filtered by labels:
+
+![filter images by labels](img/filter_images_by_label.png)
+
 ## Administrator options  
 ### Managing user  
-Administrator can add "Administrator" role to an ordinary user by click button on the left and select "Set as Administrator". To delete a user, select "Delete". 
+Administrator can add "Administrator" role to one or more ordinary users by checking checkboxes and clicking `SET AS ADMINISTRATOR`. To delete users, checked checkboxes and select `DELETE`. Deleting user is only supported under database authentication mode.
 
 ![browse project](img/new_set_admin_remove_user.png)
 
 ### Managing endpoint  
-You can list, add, edit and delete endpoints in the "Endpoints" tab. Only endpoints which are not referenced by any enabled rules can be edited.  
+You can list, add, edit and delete endpoints under `Administration->Registries`. Only endpoints which are not referenced by any rules can be deleted.  
 
-![browse project](img/new_manage_endpoint.png)
+![browse project](img/manage_endpoint.png)
 
 ### Managing replication  
-You can list, edit, enable and disable rules in the "Replication" tab. Make sure the policy is disabled before you edit it.  
+You can list, add, edit and delete rules under `Administration->Replications`.   
 
-![browse project](img/new_manage_replication.png)
+![browse project](img/manage_replication.png)
 
 ### Managing authentication
 You can change authentication mode between **Database**(default) and **LDAP** before any user is added, when there is at least one user(besides admin) in Harbor, you cannot change the authentication mode.  
@@ -141,19 +222,29 @@ Use the **Project Creation** drop-down menu to set which users can create projec
 You can manage whether a user can sign up for a new account. This option is not available if you use LDAP authentication.  
 ![browse project](img/new_self_reg.png)
 
-### Managing verification of remote certificate
-You  can choose whether to verify remote endpoint's certification. You may need to disable certificate verification if the remote registry uses a self-signed or an untrusted certificate.  
-![browse project](img/new_remote_cert.png)
-
 ### Managing email settings
 You can change Harbor's email settings, the mail server is used to send out responses to users who request to reset their password.  
 ![browse project](img/new_config_email.png)
+
+### Managing registry read only
+You can change Harbor's registry read only settings, read only mode will allow 'docker pull' while preventing 'docker push' and the deletion of repository and tag.
+![browse project](img/read_only.png)
+
+If it set to true, deleting repository, tag and pushing image will be disabled. 
+![browse project](img/read_only_enable.png)
+
+```
+$ docker push 10.117.169.182/demo/ubuntu:14.04  
+The push refers to a repository [10.117.169.182/demo/ubuntu]
+0271b8eebde3: Preparing 
+denied: The system is in read only mode. Any modification is prohibited.  
+``` 
 
 ## Pulling and pushing images using Docker client  
 
 **NOTE: Harbor only supports Registry V2 API. You need to use Docker client 1.6.0 or higher.**  
 
-Harbor supports HTTP by default and Docker client tries to connect to Harbor using HTTPS first, so if you encounter an error as below when you pull or push images, you need to add '--insecure-registry' option to ```/etc/default/docker``` (ubuntu) or ```/etc/sysconfig/docker``` (centos) and restart Docker:    
+Harbor supports HTTP by default and Docker client tries to connect to Harbor using HTTPS first, so if you encounter an error as below when you pull or push images, you need to configure insecure registry. Please, read [this document](https://docs.docker.com/registry/insecure/) in order to understand how to do this. 
   
 
 ```Error response from daemon: Get https://myregistrydomain.com/v1/users/: dial tcp myregistrydomain.com:443 getsockopt: connection refused.```   
@@ -202,6 +293,19 @@ $ docker push 10.117.169.182/demo/ubuntu:14.04
 ```  
 
 **Note: Replace "10.117.169.182" with the IP address or domain name of your Harbor node.**
+
+###  Add description to repositories
+
+After pushing an image, an Information can be added by project admin to describe this repository.
+
+First, go into the repository and select the "Info" tab.
+
+![select info tab](img/select_info_tab.png)
+
+Next, click the "EDIT" button, an textarea will appear and enter description here. Click "SAVE" button to save this information.
+
+![edit info](img/edit_description.png)
+
 
 ###  Deleting repositories  
 
@@ -254,6 +358,8 @@ If you are using a self-signed cert, make sure to copy the CA cert into ```/etc/
 
 When an image is signed, it has a tick shown in UI; otherwise, a cross sign(X) is displayed instead.  
 ![browse project](img/content_trust.png)
+
+**Video demo:** ![content trust](img/demos/content_trust.png) [youtube](https://www.youtube.com/watch?v=pPklSTJZY2E) , [Tencent Video](https://v.qq.com/x/page/n0553fzzrnf.html)
 
 ### Vulnerability scanning via Clair 
 **CAUTION: Clair is an optional component, please make sure you have already installed it in your Harbor instance before you go through this section.**
@@ -322,6 +428,8 @@ You can set policies to control the vulnerability analysis process. Currently, t
 ![browse project](img/scan_policy.png)
 
 **NOTES: Once the scheduled job is executed, the completion time of scanning all images will be updated accordingly. Please be aware that the completion time of the images may be different because the execution of analysis for each image may be carried out at different time.**
+
+**Video demo:** ![vulnerability scanning](img/demos/vul_scan.png) [youtube](https://www.youtube.com/watch?v=K4tJ6B2cGR4) , [Tencent Video](https://v.qq.com/x/page/s0553k9692d.html)
 
 ### Pull image from Harbor in Kubernetes
 Kubernetes users can easily deploy pods with images stored in Harbor.  The settings are similar to that of another private registry.  There are two major issues:

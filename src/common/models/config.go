@@ -23,23 +23,10 @@ type Authentication struct {
 }
 */
 
-// LDAP ...
-type LDAP struct {
-	URL            string `json:"url"`
-	SearchDN       string `json:"search_dn"`
-	SearchPassword string `json:"search_password"`
-	BaseDN         string `json:"base_dn"`
-	Filter         string `json:"filter"`
-	UID            string `json:"uid"`
-	Scope          int    `json:"scope"`
-	Timeout        int    `json:"timeout"` // in second
-}
-
 // Database ...
 type Database struct {
-	Type   string  `json:"type"`
-	MySQL  *MySQL  `json:"mysql,omitempty"`
-	SQLite *SQLite `json:"sqlite,omitempty"`
+	Type       string      `json:"type"`
+	PostGreSQL *PostGreSQL `json:"postgresql,omitempty"`
 }
 
 // MySQL ...
@@ -54,6 +41,15 @@ type MySQL struct {
 // SQLite ...
 type SQLite struct {
 	File string `json:"file"`
+}
+
+// PostGreSQL ...
+type PostGreSQL struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"`
+	Database string `json:"database"`
 }
 
 // Email ...
@@ -97,3 +93,15 @@ type SystemCfg struct {
 	CfgExpiration              int             `json:"cfg_expiration"`
 }
 */
+
+// ConfigEntry ...
+type ConfigEntry struct {
+	ID    int64  `orm:"pk;auto;column(id)" json:"-"`
+	Key   string `orm:"column(k)" json:"k"`
+	Value string `orm:"column(v)" json:"v"`
+}
+
+// TableName ...
+func (ce *ConfigEntry) TableName() string {
+	return "properties"
+}

@@ -33,7 +33,7 @@ import (
 	"github.com/vmware/harbor/src/ui/auth"
 	"github.com/vmware/harbor/src/ui/config"
 	"github.com/vmware/harbor/src/ui/promgr"
-	//"github.com/vmware/harbor/src/ui/promgr/pmsdriver/admiral"
+	"github.com/vmware/harbor/src/ui/promgr/pmsdriver/admiral"
 )
 
 type key string
@@ -126,7 +126,7 @@ type secretReqCtxModifier struct {
 }
 
 func (s *secretReqCtxModifier) Modify(ctx *beegoctx.Context) bool {
-	scrt := ctx.GetCookie("secret")
+	scrt := secstore.FromRequest(ctx.Request)
 	if len(scrt) == 0 {
 		return false
 	}
@@ -215,7 +215,6 @@ func (b *basicAuthReqCtxModifier) Modify(ctx *beegoctx.Context) bool {
 	pm := config.GlobalProjectMgr
 	log.Debug("creating local database security context...")
 	securCtx := local.NewSecurityContext(user, pm)
-
 	setSecurCtxAndPM(ctx.Request, securCtx, pm)
 	return true
 }
@@ -223,24 +222,25 @@ func (b *basicAuthReqCtxModifier) Modify(ctx *beegoctx.Context) bool {
 type sessionReqCtxModifier struct{}
 
 func (s *sessionReqCtxModifier) Modify(ctx *beegoctx.Context) bool {
-	username := ctx.Input.Session("username")
-	if username == nil {
+	var user models.User
+	userInterface := ctx.Input.Session("user")
+
+	if userInterface == nil {
+		log.Debug("can not get user information from session")
 		return false
 	}
 
 	log.Debug("got user information from session")
-	user := &models.User{
-		Username: username.(string),
+	user, ok := userInterface.(models.User)
+	if !ok {
+		log.Info("can not get user information from session")
+		return false
 	}
-	isSysAdmin := ctx.Input.Session("isSysAdmin")
-	if isSysAdmin != nil && isSysAdmin.(bool) {
-		user.HasAdminRole = 1
-	}
-
+	log.Debug("Getting user %+v", user)
 	log.Debug("using local database project manager")
 	pm := config.GlobalProjectMgr
 	log.Debug("creating local database security context...")
-	securCtx := local.NewSecurityContext(user, pm)
+	securCtx := local.NewSecurityContext(&user, pm)
 
 	setSecurCtxAndPM(ctx.Request, securCtx, pm)
 
@@ -264,15 +264,13 @@ func (t *tokenReqCtxModifier) Modify(ctx *beegoctx.Context) bool {
 		return false
 	}
 
-	/*
-		log.Debug("creating PMS project manager...")
-		pm := admiral.NewProjectManager(config.AdmiralClient,
-			config.AdmiralEndpoint(), &admiral.RawTokenReader{
-				Token: token,
-			})
-	*/
-	// TODO create the DefaultProjectManager with the real admiral PMSDriver
-	pm := promgr.NewDefaultProjectManager(nil, false)
+	log.Debug("creating PMS project manager...")
+	driver := admiral.NewDriver(config.AdmiralClient,
+		config.AdmiralEndpoint(), &admiral.RawTokenReader{
+			Token: token,
+		})
+
+	pm := promgr.NewDefaultProjectManager(driver, false)
 
 	log.Debug("creating admiral security context...")
 	securCtx := admr.NewSecurityContext(authContext, pm)
@@ -291,13 +289,10 @@ func (u *unauthorizedReqCtxModifier) Modify(ctx *beegoctx.Context) bool {
 	var pm promgr.ProjectManager
 	if config.WithAdmiral() {
 		// integration with admiral
-		/*
-			log.Debug("creating PMS project manager...")
-			pm = admiral.NewProjectManager(config.AdmiralClient,
-				config.AdmiralEndpoint(), nil)
-		*/
-		// TODO create the DefaultProjectManager with the real admiral PMSDriver
-		pm = promgr.NewDefaultProjectManager(nil, false)
+		log.Debug("creating PMS project manager...")
+		driver := admiral.NewDriver(config.AdmiralClient,
+			config.AdmiralEndpoint(), nil)
+		pm = promgr.NewDefaultProjectManager(driver, false)
 		log.Debug("creating admiral security context...")
 		securCtx = admr.NewSecurityContext(nil, pm)
 	} else {

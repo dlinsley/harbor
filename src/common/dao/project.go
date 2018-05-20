@@ -17,83 +17,69 @@ package dao
 import (
 	"github.com/vmware/harbor/src/common"
 	"github.com/vmware/harbor/src/common/models"
+	"github.com/vmware/harbor/src/common/utils/log"
 
 	"fmt"
 	"time"
-
-	//"github.com/vmware/harbor/src/common/utils/log"
 )
-
-//TODO:transaction, return err
 
 // AddProject adds a project to the database along with project roles information and access log records.
 func AddProject(project models.Project) (int64, error) {
-
 	o := GetOrmer()
-	p, err := o.Raw("insert into project (owner_id, name, creation_time, update_time, deleted, public) values (?, ?, ?, ?, ?, ?)").Prepare()
-	if err != nil {
-		return 0, err
-	}
 
+	sql := "insert into project (owner_id, name, creation_time, update_time, deleted) values (?, ?, ?, ?, ?) RETURNING project_id"
+	var projectID int64
 	now := time.Now()
-	r, err := p.Exec(project.OwnerID, project.Name, now, now, project.Deleted, project.Public)
+
+	err := o.Raw(sql, project.OwnerID, project.Name, now, now, project.Deleted).QueryRow(&projectID)
 	if err != nil {
 		return 0, err
 	}
 
-	projectID, err := r.LastInsertId()
+	pmID, err := addProjectMember(models.Member{
+		ProjectID:  projectID,
+		EntityID:   project.OwnerID,
+		Role:       models.PROJECTADMIN,
+		EntityType: common.UserMember,
+	})
 	if err != nil {
 		return 0, err
 	}
-
-	err = AddProjectMember(projectID, project.OwnerID, models.PROJECTADMIN)
-	return projectID, err
+	if pmID == 0 {
+		return projectID, err
+	}
+	return projectID, nil
 }
 
-/*
-// IsProjectPublic ...
-func IsProjectPublic(projectName string) bool {
-	project, err := GetProjectByName(projectName)
-	if err != nil {
-		log.Errorf("Error occurred in GetProjectByName: %v", err)
-		return false
-	}
-	if project == nil {
-		return false
-	}
-	return project.Public == 1
-}
+func addProjectMember(member models.Member) (int, error) {
 
-//ProjectExists returns whether the project exists according to its name of ID.
-func ProjectExists(nameOrID interface{}) (bool, error) {
+	log.Debugf("Adding project member %+v", member)
+
 	o := GetOrmer()
-	type dummy struct{}
-	sql := `select project_id from project where deleted = 0 and `
-	switch nameOrID.(type) {
-	case int64:
-		sql += `project_id = ?`
-	case string:
-		sql += `name = ?`
-	default:
-		return false, fmt.Errorf("Invalid nameOrId: %v", nameOrID)
+
+	if member.EntityID <= 0 {
+		return 0, fmt.Errorf("Invalid entity_id, member: %+v", member)
 	}
 
-	var d []dummy
-	num, err := o.Raw(sql, nameOrID).QueryRows(&d)
+	if member.ProjectID <= 0 {
+		return 0, fmt.Errorf("Invalid project_id, member: %+v", member)
+	}
+
+	var pmID int
+	sql := "insert into project_member (project_id, entity_id , role, entity_type) values (?, ?, ?, ?) RETURNING id"
+	err := o.Raw(sql, member.ProjectID, member.EntityID, member.Role, member.EntityType).QueryRow(&pmID)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	return num > 0, nil
-
+	return pmID, err
 }
-*/
 
 // GetProjectByID ...
 func GetProjectByID(id int64) (*models.Project, error) {
 	o := GetOrmer()
 
-	sql := `select p.project_id, p.name, u.username as owner_name, p.owner_id, p.creation_time, p.update_time, p.public  
-		from project p left join user u on p.owner_id = u.user_id where p.deleted = 0 and p.project_id = ?`
+	sql := `select p.project_id, p.name, u.username as owner_name, p.owner_id, p.creation_time, p.update_time  
+		from project p left join harbor_user u on p.owner_id = u.user_id where p.deleted = false and p.project_id = ?`
 	queryParam := make([]interface{}, 1)
 	queryParam = append(queryParam, id)
 
@@ -115,7 +101,7 @@ func GetProjectByID(id int64) (*models.Project, error) {
 func GetProjectByName(name string) (*models.Project, error) {
 	o := GetOrmer()
 	var p []models.Project
-	n, err := o.Raw(`select * from project where name = ? and deleted = 0`, name).QueryRows(&p)
+	n, err := o.Raw(`select * from project where name = ? and deleted = false`, name).QueryRows(&p)
 	if err != nil {
 		return nil, err
 	}
@@ -127,94 +113,18 @@ func GetProjectByName(name string) (*models.Project, error) {
 	return &p[0], nil
 }
 
-/*
-// GetPermission gets roles that the user has according to the project.
-func GetPermission(username, projectName string) (string, error) {
-	o := GetOrmer()
-
-	sql := `select r.role_code from role as r
-		inner join project_member as pm on r.role_id = pm.role
-		inner join user as u on u.user_id = pm.user_id
-		inner join project p on p.project_id = pm.project_id
-		where u.username = ? and p.name = ? and u.deleted = 0 and p.deleted = 0`
-
-	var r []models.Role
-	n, err := o.Raw(sql, username, projectName).QueryRows(&r)
-	if err != nil {
-		return "", err
-	}
-
-	if n == 0 {
-		return "", nil
-	}
-
-	return r[0].RoleCode, nil
-}
-*/
-
-// ToggleProjectPublicity toggles the publicity of the project.
-func ToggleProjectPublicity(projectID int64, publicity int) error {
-	o := GetOrmer()
-	sql := "update project set public = ? where project_id = ?"
-	_, err := o.Raw(sql, publicity, projectID).Exec()
-	return err
-}
-
-// GetHasReadPermProjects returns a project list,
-// which satisfies the following conditions:
-// 1. the project is not deleted
-// 2. the prject is public or the user is a member of the project
-func GetHasReadPermProjects(username string) ([]*models.Project, error) {
-	user, err := GetUser(models.User{
-		Username: username,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	o := GetOrmer()
-
-	sql :=
-		`select distinct p.project_id, p.name, p.public, 
-			p.owner_id, p.creation_time, p.update_time
-		from project p 
-		left join project_member pm 
-		on p.project_id = pm.project_id 
-		where (pm.user_id = ? or p.public = 1) 
-		and p.deleted = 0 `
-
-	var projects []*models.Project
-
-	if _, err := o.Raw(sql, user.UserID).QueryRows(&projects); err != nil {
-		return nil, err
-	}
-
-	return projects, nil
-}
-
 // GetTotalOfProjects returns the total count of projects
 // according to the query conditions
-func GetTotalOfProjects(query *models.ProjectQueryParam, base ...*models.BaseProjectCollection) (int64, error) {
-
-	var (
-		owner  string
-		name   string
-		public *bool
-		member string
-		role   int
-	)
-
+func GetTotalOfProjects(query *models.ProjectQueryParam) (int64, error) {
+	var pagination *models.Pagination
 	if query != nil {
-		owner = query.Owner
-		name = query.Name
-		public = query.Public
-		if query.Member != nil {
-			member = query.Member.Name
-			role = query.Member.Role
-		}
+		pagination = query.Pagination
+		query.Pagination = nil
 	}
-
-	sql, params := projectQueryConditions(owner, name, public, member, role, base...)
+	sql, params := projectQueryConditions(query)
+	if query != nil {
+		query.Pagination = pagination
+	}
 
 	sql = `select count(*) ` + sql
 
@@ -224,120 +134,109 @@ func GetTotalOfProjects(query *models.ProjectQueryParam, base ...*models.BasePro
 }
 
 // GetProjects returns a project list according to the query conditions
-func GetProjects(query *models.ProjectQueryParam, base ...*models.BaseProjectCollection) ([]*models.Project, error) {
+func GetProjects(query *models.ProjectQueryParam) ([]*models.Project, error) {
+	sqlStr, queryParam := projectQueryConditions(query)
+	sqlStr = `select distinct p.project_id, p.name, p.owner_id, 
+		p.creation_time, p.update_time ` + sqlStr + ` order by p.name`
+	sqlStr, queryParam = CreatePagination(query, sqlStr, queryParam)
 
-	var (
-		owner  string
-		name   string
-		public *bool
-		member string
-		role   int
-		page   int64
-		size   int64
-	)
-
-	if query != nil {
-		owner = query.Owner
-		name = query.Name
-		public = query.Public
-		if query.Member != nil {
-			member = query.Member.Name
-			role = query.Member.Role
-		}
-		if query.Pagination != nil {
-			page = query.Pagination.Page
-			size = query.Pagination.Size
-		}
-	}
-
-	sql, params := projectQueryConditions(owner, name, public, member, role, base...)
-
-	sql = `select distinct p.project_id, p.name, p.public, p.owner_id, 
-				p.creation_time, p.update_time ` + sql
-	if size > 0 {
-		sql += ` limit ?`
-		params = append(params, size)
-
-		if page > 0 {
-			sql += ` offset ?`
-			params = append(params, (page-1)*size)
-		}
-	}
-
+	log.Debugf("sql:=%+v, param= %+v", sqlStr, queryParam)
 	var projects []*models.Project
-	_, err := GetOrmer().Raw(sql, params).QueryRows(&projects)
+	_, err := GetOrmer().Raw(sqlStr, queryParam).QueryRows(&projects)
+
+	return projects, err
+
+}
+
+// GetGroupProjects - Get user's all projects, including user is the user member of this project
+// and the user is in the group which is a group member of this project.
+func GetGroupProjects(groupDNCondition string, query *models.ProjectQueryParam) ([]*models.Project, error) {
+	sql, params := projectQueryConditions(query)
+	sql = `select distinct p.project_id, p.name, p.owner_id, 
+				p.creation_time, p.update_time ` + sql
+	if len(groupDNCondition) > 0 {
+		sql = fmt.Sprintf(
+			`%s union select distinct p.project_id, p.name, p.owner_id, p.creation_time, p.update_time  
+		     from project p 
+		     left join project_member pm on p.project_id = pm.project_id
+		     left join user_group ug on ug.id = pm.entity_id and pm.entity_type = 'g' and ug.group_type = 1
+			 where ug.ldap_group_dn in ( %s ) order by name`,
+			sql, groupDNCondition)
+	}
+	sqlStr, queryParams := CreatePagination(query, sql, params)
+	log.Debugf("query sql:%v", sql)
+	var projects []*models.Project
+	_, err := GetOrmer().Raw(sqlStr, queryParams).QueryRows(&projects)
 	return projects, err
 }
 
-func projectQueryConditions(owner, name string, public *bool, member string,
-	role int, base ...*models.BaseProjectCollection) (string, []interface{}) {
-	params := []interface{}{}
-
-	// the base project collections:
-	// 1. all projects
-	// 2. public projects
-	// 3. public projects and projects which the user is a member of
-	collection := `project `
-	if len(base) != 0 && base[0] != nil {
-		if len(base[0].Member) == 0 && base[0].Public {
-			collection = `(select * from project pr
-					where pr.public=1) `
-		}
-		if len(base[0].Member) > 0 && base[0].Public {
-			collection = `(select pr.project_id, pr.owner_id, pr.name, pr.
-						creation_time, pr.update_time, pr.deleted, pr.public 
-					from project pr
-					join project_member prm
-						on pr.project_id = prm.project_id
-					join user ur
-						on prm.user_id=ur.user_id
-					where ur.username=?  or pr.public=1 )`
-			params = append(params, base[0].Member)
-		}
+// GetTotalGroupProjects - Get the total count of projects, including  user is the member of this project and the
+// user is in the group, which is the group member of this project.
+func GetTotalGroupProjects(groupDNCondition string, query *models.ProjectQueryParam) (int, error) {
+	var sql string
+	sqlCondition, params := projectQueryConditions(query)
+	if len(groupDNCondition) == 0 {
+		sql = `select count(1) ` + sqlCondition
+	} else {
+		sql = fmt.Sprintf(
+			`select count(1) 
+			   from ( select  p.project_id %s  union select  p.project_id  
+			   from project p 
+			   left join project_member pm on p.project_id = pm.project_id
+			   left join user_group ug on ug.id = pm.entity_id and pm.entity_type = 'g' and ug.group_type = 1
+			   where ug.ldap_group_dn in ( %s )) t`,
+			sqlCondition, groupDNCondition)
 	}
+	log.Debugf("query sql:%v", sql)
+	var count int
+	if err := GetOrmer().Raw(sql, params).QueryRow(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
 
-	sql := ` from ` + collection + ` as p`
-
-	if len(owner) != 0 {
-		sql += ` join user u1
+func projectQueryConditions(query *models.ProjectQueryParam) (string, []interface{}) {
+	params := []interface{}{}
+	sql := ` from project as p`
+	if query == nil {
+		sql += ` where p.deleted=false`
+		return sql, params
+	}
+	// if query.ProjectIDs is not nil but has no element, the query will returns no rows
+	if query.ProjectIDs != nil && len(query.ProjectIDs) == 0 {
+		sql += ` where 1 = 0`
+		return sql, params
+	}
+	if len(query.Owner) != 0 {
+		sql += ` join harbor_user u1
 					on p.owner_id = u1.user_id`
 	}
-
-	if len(member) != 0 {
+	if query.Member != nil && len(query.Member.Name) != 0 {
 		sql += ` join project_member pm
-					on p.project_id = pm.project_id
-					join user u2
-					on pm.user_id=u2.user_id`
+					on p.project_id = pm.project_id and pm.entity_type = 'u'
+					join harbor_user u2
+					on pm.entity_id=u2.user_id`
 	}
-	sql += ` where p.deleted=0`
+	sql += ` where p.deleted=false`
 
-	if len(owner) != 0 {
+	if len(query.Owner) != 0 {
 		sql += ` and u1.username=?`
-		params = append(params, owner)
+		params = append(params, query.Owner)
 	}
 
-	if len(name) != 0 {
+	if len(query.Name) != 0 {
 		sql += ` and p.name like ?`
-		params = append(params, "%"+escape(name)+"%")
+		params = append(params, "%"+Escape(query.Name)+"%")
 	}
 
-	if public != nil {
-		sql += ` and p.public = ?`
-		if *public {
-			params = append(params, 1)
-		} else {
-			params = append(params, 0)
-		}
-	}
-
-	if len(member) != 0 {
+	if query.Member != nil && len(query.Member.Name) != 0 {
 		sql += ` and u2.username=?`
-		params = append(params, member)
+		params = append(params, query.Member.Name)
 
-		if role > 0 {
+		if query.Member.Role > 0 {
 			sql += ` and pm.role = ?`
 			roleID := 0
-			switch role {
+			switch query.Member.Role {
 			case common.RoleProjectAdmin:
 				roleID = 1
 			case common.RoleDeveloper:
@@ -349,9 +248,25 @@ func projectQueryConditions(owner, name string, public *bool, member string,
 			params = append(params, roleID)
 		}
 	}
+	if len(query.ProjectIDs) > 0 {
+		sql += fmt.Sprintf(` and p.project_id in ( %s )`,
+			paramPlaceholder(len(query.ProjectIDs)))
+		params = append(params, query.ProjectIDs)
+	}
+	return sql, params
+}
 
-	sql += ` order by p.name`
+// CreatePagination ...
+func CreatePagination(query *models.ProjectQueryParam, sql string, params []interface{}) (string, []interface{}) {
+	if query != nil && query.Pagination != nil && query.Pagination.Size > 0 {
+		sql += ` limit ?`
+		params = append(params, query.Pagination.Size)
 
+		if query.Pagination.Page > 0 {
+			sql += ` offset ?`
+			params = append(params, (query.Pagination.Page-1)*query.Pagination.Size)
+		}
+	}
 	return sql, params
 }
 
@@ -361,12 +276,37 @@ func DeleteProject(id int64) error {
 	if err != nil {
 		return err
 	}
-
 	name := fmt.Sprintf("%s#%d", project.Name, project.ProjectID)
-
 	sql := `update project 
-		set deleted = 1, name = ? 
+		set deleted = true, name = ? 
 		where project_id = ?`
 	_, err = GetOrmer().Raw(sql, name, id).Exec()
 	return err
+}
+
+// GetRolesByLDAPGroup - Get Project roles of the
+// specified group DN is a member of current project
+func GetRolesByLDAPGroup(projectID int64, groupDNCondition string) ([]int, error) {
+	var roles []int
+	if len(groupDNCondition) == 0 {
+		return roles, nil
+	}
+	o := GetOrmer()
+	//Because an LDAP user can be memberof multiple groups,
+	//the role is in descent order (1-admin, 2-developer, 3-guest), use min to select the max privilege role.
+	sql := fmt.Sprintf(
+		`select min(pm.role) from project_member pm 
+		left join user_group ug on pm.entity_type = 'g' and pm.entity_id = ug.id 
+		where ug.ldap_group_dn in ( %s ) and pm.project_id = ? `,
+		groupDNCondition)
+	log.Debugf("sql:%v", sql)
+	if _, err := o.Raw(sql, projectID).QueryRows(&roles); err != nil {
+		log.Warningf("Error in GetRolesByLDAPGroup, error: %v", err)
+		return nil, err
+	}
+	//If there is no row selected, the min returns an empty row, to avoid return 0 as role
+	if len(roles) == 1 && roles[0] == 0 {
+		return []int{}, nil
+	}
+	return roles, nil
 }

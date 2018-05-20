@@ -34,8 +34,8 @@ func GetUser(query models.User) (*models.User, error) {
 
 	sql := `select user_id, username, email, realname, comment, reset_uuid, salt,
 		sysadmin_flag, creation_time, update_time
-		from user u
-		where deleted = 0 `
+		from harbor_user u
+		where deleted = false `
 	queryParam := make([]interface{}, 1)
 	if query.UserID != 0 {
 		sql += ` and user_id = ? `
@@ -50,6 +50,11 @@ func GetUser(query models.User) (*models.User, error) {
 	if query.ResetUUID != "" {
 		sql += ` and reset_uuid = ? `
 		queryParam = append(queryParam, query.ResetUUID)
+	}
+
+	if query.Email != "" {
+		sql += ` and email = ? `
+		queryParam = append(queryParam, query.Email)
 	}
 
 	var u []models.User
@@ -74,7 +79,7 @@ func LoginByDb(auth models.AuthModel) (*models.User, error) {
 	o := GetOrmer()
 
 	var users []models.User
-	n, err := o.Raw(`select * from user where (username = ? or email = ?) and deleted = 0`,
+	n, err := o.Raw(`select * from harbor_user where (username = ? or email = ?) and deleted = false`,
 		auth.Principal, auth.Principal).QueryRows(&users)
 	if err != nil {
 		return nil, err
@@ -129,10 +134,10 @@ func userQueryConditions(query *models.UserQuery) orm.QuerySeter {
 }
 
 // ToggleUserAdminRole gives a user admin role.
-func ToggleUserAdminRole(userID, hasAdmin int) error {
+func ToggleUserAdminRole(userID int, hasAdmin bool) error {
 	o := GetOrmer()
 	queryParams := make([]interface{}, 1)
-	sql := `update user set sysadmin_flag = ? where user_id = ?`
+	sql := `update harbor_user set sysadmin_flag = ? where user_id = ?`
 	queryParams = append(queryParams, hasAdmin)
 	queryParams = append(queryParams, userID)
 	r, err := o.Raw(sql, queryParams).Exec()
@@ -159,9 +164,9 @@ func ChangeUserPassword(u models.User, oldPassword ...string) (err error) {
 	salt := utils.GenerateRandomString()
 	if len(oldPassword) == 0 {
 		//In some cases, it may no need to check old password, just as Linux change password policies.
-		r, err = o.Raw(`update user set password=?, salt=? where user_id=?`, utils.Encrypt(u.Password, salt), salt, u.UserID).Exec()
+		r, err = o.Raw(`update harbor_user set password=?, salt=? where user_id=?`, utils.Encrypt(u.Password, salt), salt, u.UserID).Exec()
 	} else {
-		r, err = o.Raw(`update user set password=?, salt=? where user_id=? and password = ?`, utils.Encrypt(u.Password, salt), salt, u.UserID, utils.Encrypt(oldPassword[0], u.Salt)).Exec()
+		r, err = o.Raw(`update harbor_user set password=?, salt=? where user_id=? and password = ?`, utils.Encrypt(u.Password, salt), salt, u.UserID, utils.Encrypt(oldPassword[0], u.Salt)).Exec()
 	}
 
 	if err != nil {
@@ -181,7 +186,7 @@ func ChangeUserPassword(u models.User, oldPassword ...string) (err error) {
 // ResetUserPassword ...
 func ResetUserPassword(u models.User) error {
 	o := GetOrmer()
-	r, err := o.Raw(`update user set password=?, reset_uuid=? where reset_uuid=?`, utils.Encrypt(u.Password, u.Salt), "", u.ResetUUID).Exec()
+	r, err := o.Raw(`update harbor_user set password=?, reset_uuid=? where reset_uuid=?`, utils.Encrypt(u.Password, u.Salt), "", u.ResetUUID).Exec()
 	if err != nil {
 		return err
 	}
@@ -198,7 +203,7 @@ func ResetUserPassword(u models.User) error {
 // UpdateUserResetUUID ...
 func UpdateUserResetUUID(u models.User) error {
 	o := GetOrmer()
-	_, err := o.Raw(`update user set reset_uuid=? where email=?`, u.ResetUUID, u.Email).Exec()
+	_, err := o.Raw(`update harbor_user set reset_uuid=? where email=?`, u.ResetUUID, u.Email).Exec()
 	return err
 }
 
@@ -213,7 +218,7 @@ func CheckUserPassword(query models.User) (*models.User, error) {
 		return nil, nil
 	}
 
-	sql := `select user_id, username, salt from user where deleted = 0 and username = ? and password = ?`
+	sql := `select user_id, username, salt from harbor_user where deleted = false and username = ? and password = ?`
 	queryParam := make([]interface{}, 1)
 	queryParam = append(queryParam, currentUser.Username)
 	queryParam = append(queryParam, utils.Encrypt(query.Password, currentUser.Salt))
@@ -246,17 +251,68 @@ func DeleteUser(userID int) error {
 	name := fmt.Sprintf("%s#%d", user.Username, user.UserID)
 	email := fmt.Sprintf("%s#%d", user.Email, user.UserID)
 
-	_, err = o.Raw(`update user 
-		set deleted = 1, username = ?, email = ?
+	_, err = o.Raw(`update harbor_user 
+		set deleted = true, username = ?, email = ?
 		where user_id = ?`, name, email, userID).Exec()
 	return err
 }
 
-// ChangeUserProfile ...
-func ChangeUserProfile(user models.User) error {
+// ChangeUserProfile - Update user in local db,
+// cols to specify the columns need to update,
+// Email, and RealName, Comment are updated by default.
+func ChangeUserProfile(user models.User, cols ...string) error {
 	o := GetOrmer()
-	if _, err := o.Update(&user, "Email", "Realname", "Comment"); err != nil {
+	if len(cols) == 0 {
+		cols = []string{"Email", "Realname", "Comment"}
+	}
+	if _, err := o.Update(&user, cols...); err != nil {
 		log.Errorf("update user failed, error: %v", err)
+		return err
+	}
+	return nil
+}
+
+// OnBoardUser will check if a user exists in user table, if not insert the user and
+// put the id in the pointer of user model, if it does exist, return the user's profile.
+// This is used for ldap and uaa authentication, such the user can have an ID in Harbor.
+func OnBoardUser(u *models.User) error {
+	o := GetOrmer()
+	created, id, err := o.ReadOrCreate(u, "Username")
+	if err != nil {
+		return err
+	}
+	if created {
+		u.UserID = int(id)
+	} else {
+		existing, err := GetUser(*u)
+		if err != nil {
+			return err
+		}
+		u.Email = existing.Email
+		u.HasAdminRole = existing.HasAdminRole
+		u.Realname = existing.Realname
+		u.UserID = existing.UserID
+	}
+	return nil
+}
+
+//IsSuperUser checks if the user is super user(conventionally id == 1) of Harbor
+func IsSuperUser(username string) bool {
+	u, err := GetUser(models.User{
+		Username: username,
+	})
+	log.Debugf("Check if user %s is super user", username)
+	if err != nil {
+		log.Errorf("Failed to get user from DB, username: %s, error: %v", username, err)
+		return false
+	}
+	return u != nil && u.UserID == 1
+}
+
+//CleanUser - Clean this user information from DB
+func CleanUser(id int64) error {
+	if _, err := GetOrmer().QueryTable(&models.User{}).
+		Filter("UserID", id).Delete(); err != nil {
 		return err
 	}
 	return nil

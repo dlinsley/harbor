@@ -11,11 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-import { NgForm } from '@angular/forms';
-import { httpStatusCode, AlertType } from './shared.const';
 /**
  * To handle the error message body
- * 
+ *
  * @export
  * @returns {string}
  */
@@ -24,7 +22,7 @@ export const errorHandler = function (error: any): string {
         return "UNKNOWN_ERROR";
     }
     if (!(error.statusCode || error.status)) {
-        //treat as string message
+        // treat as string message
         return '' + error;
     } else {
         switch (error.statusCode || error.status) {
@@ -46,4 +44,28 @@ export const errorHandler = function (error: any): string {
                 return "UNKNOWN_ERROR";
         }
     }
+};
+
+export class CancelablePromise<T> {
+
+  constructor(promise: Promise<T>) {
+    this.wrappedPromise = new Promise((resolve, reject) => {
+      promise.then((val) =>
+        this.isCanceled ? reject({isCanceled: true}) : resolve(val)
+      );
+      promise.catch((error) =>
+        this.isCanceled ? reject({isCanceled: true}) : reject(error)
+      );
+    });
+  }
+
+  private wrappedPromise: Promise<T>;
+  private isCanceled: boolean;
+  getPromise(): Promise<T> {
+    return this.wrappedPromise;
+  }
+
+  cancel() {
+    this.isCanceled = true;
+  }
 }

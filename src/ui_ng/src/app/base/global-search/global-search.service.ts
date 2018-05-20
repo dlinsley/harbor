@@ -12,42 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Injectable } from '@angular/core';
-import { Headers, Http, RequestOptions } from '@angular/http';
+import { Http } from '@angular/http';
 import 'rxjs/add/operator/toPromise';
 
 import { SearchResults } from './search-results';
+import { HTTP_GET_OPTIONS } from "../../shared/shared.utils";
 
 const searchEndpoint = "/api/search";
 /**
  * Declare service to handle the global search
- * 
- * 
+ *
+ *
  * @export
  * @class GlobalSearchService
  */
 @Injectable()
 export class GlobalSearchService {
-    headers = new Headers({
-        "Content-Type": 'application/json'
-    });
-    options = new RequestOptions({
-        headers: this.headers
-    });
 
     constructor(private http: Http) { }
 
     /**
      * Search related artifacts with the provided keyword
-     * 
+     *
      * @param {string} keyword
      * @returns {Promise<SearchResults>}
-     * 
+     *
      * @memberOf GlobalSearchService
      */
     doSearch(term: string): Promise<SearchResults> {
         let searchUrl = searchEndpoint + "?q=" + term;
 
-        return this.http.get(searchUrl, this.options).toPromise()
+        return this.http.get(searchUrl, HTTP_GET_OPTIONS).toPromise()
             .then(response => response.json() as SearchResults)
             .catch(error => Promise.reject(error));
     }

@@ -20,7 +20,7 @@ import { SessionService } from '../shared/session.service';
 import 'rxjs/add/operator/mergeMap';
 
 @Injectable()
-export class ProjectRoutingResolver implements Resolve<Project>{
+export class ProjectRoutingResolver implements Resolve<Project> {
 
   constructor(
     private sessionService: SessionService,
@@ -28,7 +28,7 @@ export class ProjectRoutingResolver implements Resolve<Project>{
     private router: Router) { }
 
   resolve(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Promise<Project> {
-    //Support both parameters and query parameters
+    // Support both parameters and query parameters
     let projectId = route.params['id'];
     if (!projectId) {
       projectId = route.queryParams['project_id'];
@@ -42,14 +42,14 @@ export class ProjectRoutingResolver implements Resolve<Project>{
           if (currentUser) {
             let projectMembers = this.sessionService.getProjectMembers();
             if (projectMembers) {
-              let currentMember = projectMembers.find(m => m.user_id === currentUser.user_id);
+              let currentMember = projectMembers.find(m => m.entity_id === currentUser.user_id);
               if (currentMember) {
                 project.is_member = true;
                 project.has_project_admin_role = (currentMember.role_name === 'projectAdmin');
                 project.role_name = currentMember.role_name;
               }
             }
-            if (currentUser.has_admin_role === 1) {
+            if (currentUser.has_admin_role) {
               project.has_project_admin_role = true;
             }
           }

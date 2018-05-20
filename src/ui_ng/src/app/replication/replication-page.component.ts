@@ -12,21 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 import { Component, OnInit, ViewChild, AfterViewInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import {ActivatedRoute, Router} from '@angular/router';
+
 import { ReplicationComponent } from 'harbor-ui';
 
+import {SessionService} from "../shared/session.service";
+import {Project} from "../project/project";
+import {ProjectService} from "../project/project.service";
+
 @Component({
-  selector: 'replicaton',
+  selector: 'replication',
   templateUrl: 'replication-page.component.html'
 })
 export class ReplicationPageComponent implements OnInit, AfterViewInit {
   projectIdentify: string | number;
   @ViewChild("replicationView") replicationView: ReplicationComponent;
+  projectName: string;
 
-  constructor(private route: ActivatedRoute) { }
+  constructor(private route: ActivatedRoute,
+              private router: Router,
+              private proService: ProjectService,
+              private session: SessionService) { }
 
   ngOnInit(): void {
     this.projectIdentify = +this.route.snapshot.parent.params['id'];
+
+    this.proService.listProjects("", undefined).toPromise()
+        .then(response => {
+          let projects = response.json() as Project[];
+          if (projects.length) {
+            let project = projects.find(data => data.project_id === this.projectIdentify);
+            if (project) {
+              this.projectName = project.name;
+            }
+          }
+        });
+  }
+
+  public get isSystemAdmin(): boolean {
+    let account = this.session.getCurrentUser();
+    return account != null && account.has_admin_role;
   }
 
   ngAfterViewInit(): void {
@@ -36,5 +61,9 @@ export class ReplicationPageComponent implements OnInit, AfterViewInit {
         this.replicationView.openModal();
       }
     }
+  }
+
+  goRegistry(): void {
+    this.router.navigate(['/harbor', 'registries']);
   }
 }

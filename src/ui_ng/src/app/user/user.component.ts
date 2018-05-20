@@ -15,22 +15,23 @@ import { Component, OnInit, ViewChild, OnDestroy, ChangeDetectionStrategy, Chang
 import 'rxjs/add/operator/toPromise';
 import { Subscription } from 'rxjs/Subscription';
 
-import { UserService } from './user.service';
-import { User } from './user';
-import { NewUserModalComponent } from './new-user-modal.component';
 import { TranslateService } from '@ngx-translate/core';
+
+import { ConfirmationState, ConfirmationTargets, ConfirmationButtons } from '../shared/shared.const';
 import { ConfirmationDialogService } from '../shared/confirmation-dialog/confirmation-dialog.service';
 import { ConfirmationMessage } from '../shared/confirmation-dialog/confirmation-message';
-import { ConfirmationState, ConfirmationTargets, ConfirmationButtons } from '../shared/shared.const'
+import {BatchInfo, BathInfoChanges} from '../shared/confirmation-dialog/confirmation-batch-message';
 import { MessageHandlerService } from '../shared/message-handler/message-handler.service';
-
 import { SessionService } from '../shared/session.service';
 import { AppConfigService } from '../app-config.service';
 
+import { NewUserModalComponent } from './new-user-modal.component';
+import { UserService } from './user.service';
+import { User } from './user';
 /**
  * NOTES:
  *   Pagination for this component is a temporary workaround solution. It will be replaced in future release.
- * 
+ *
  * @export
  * @class UserComponent
  * @implements {OnInit}
@@ -40,7 +41,7 @@ import { AppConfigService } from '../app-config.service';
 @Component({
   selector: 'harbor-user',
   templateUrl: 'user.component.html',
-  styleUrls: ['user.component.css'],
+  styleUrls: ['user.component.scss'],
   providers: [UserService],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -48,19 +49,21 @@ import { AppConfigService } from '../app-config.service';
 export class UserComponent implements OnInit, OnDestroy {
   users: User[] = [];
   originalUsers: Promise<User[]>;
-  private onGoing: boolean = true;
-  private adminMenuText: string = "";
-  private adminColumn: string = "";
-  private deletionSubscription: Subscription;
+  selectedRow: User[] = [];
+  ISADMNISTRATOR: string = "USER.ENABLE_ADMIN_ACTION";
+  batchDelectionInfos: BatchInfo[] = [];
 
   currentTerm: string;
   totalCount: number = 0;
   currentPage: number = 1;
+  timerHandler: any;
 
+  private onGoing: boolean = true;
+  private adminMenuText: string = "";
+  private adminColumn: string = "";
+  private deletionSubscription: Subscription;
   @ViewChild(NewUserModalComponent)
   newUserDialog: NewUserModalComponent;
-
-  timerHandler: any;
 
   constructor(
     private userService: UserService,
@@ -90,17 +93,40 @@ export class UserComponent implements OnInit, OnDestroy {
     return false;
   }
 
-  private isMatchFilterTerm(terms: string, testedItem: string): boolean {
-    return testedItem.toLowerCase().indexOf(terms.toLowerCase()) != -1;
+  get onlySelf(): boolean {
+    return this.selectedRow.length === 1 && this.isMySelf(this.selectedRow[0].user_id);
   }
 
   public get canCreateUser(): boolean {
     let appConfig = this.appConfigService.getConfig();
     if (appConfig) {
-      return appConfig.auth_mode != 'ldap_auth';
+      return !(appConfig.auth_mode === 'ldap_auth' || appConfig.auth_mode === 'uaa_auth');
     } else {
       return true;
     }
+  }
+
+  public get ifSameRole(): boolean {
+    let usersRole: number[] = [];
+    this.selectedRow.forEach(user => {
+      if (user.user_id === 0 || this.isMySelf(user.user_id)) {
+        return false;
+      }
+      if (user.has_admin_role) {
+        usersRole.push(1);
+      } else {
+        usersRole.push(0);
+      }
+    });
+    if (usersRole.length && usersRole.every(num => num === 0)) {
+      this.ISADMNISTRATOR = 'USER.ENABLE_ADMIN_ACTION';
+      return true;
+    }
+    if (usersRole.length && usersRole.every(num => num === 1)) {
+      this.ISADMNISTRATOR = 'USER.DISABLE_ADMIN_ACTION';
+      return true;
+    }
+    return false;
   }
 
   isSystemAdmin(u: User): string {
@@ -125,9 +151,7 @@ export class UserComponent implements OnInit, OnDestroy {
     return this.onGoing;
   }
 
-  ngOnInit(): void {
-    this.forceRefreshView(5000);
-  }
+  ngOnInit(): void {}
 
   ngOnDestroy(): void {
     if (this.deletionSubscription) {
@@ -140,102 +164,144 @@ export class UserComponent implements OnInit, OnDestroy {
     }
   }
 
-  //Filter items by keywords
+  // Filter items by keywords
   doFilter(terms: string): void {
+    this.selectedRow = [];
     this.currentTerm = terms;
     this.originalUsers.then(users => {
       if (terms.trim() === "") {
         this.refreshUser((this.currentPage - 1) * 15, this.currentPage * 15);
       } else {
-        this.users = users.filter(user => {
+        let selectUsers = users.filter(user => {
           return this.isMatchFilterTerm(terms, user.username);
         });
+        this.totalCount = selectUsers.length;
+        this.users = selectUsers.slice((this.currentPage - 1) * 15, this.currentPage * 15); // First page
+
         this.forceRefreshView(5000);
       }
     });
   }
 
-  //Disable the admin role for the specified user
-  changeAdminRole(user: User): void {
-    //Double confirm user is existing
-    if (!user || user.user_id === 0) {
-      return;
-    }
+  // Disable the admin role for the specified user
+  changeAdminRole(): void {
+    let promiseLists: any[] = [];
+    if (this.selectedRow.length) {
+      if (this.ISADMNISTRATOR === 'USER.ENABLE_ADMIN_ACTION') {
+        for (let i = 0; i < this.selectedRow.length; i++) {
+          // Double confirm user is existing
+          if (this.selectedRow[i].user_id === 0 || this.isMySelf(this.selectedRow[i].user_id)) {
+            continue;
+          }
+          let updatedUser: User = new User();
+          updatedUser.user_id = this.selectedRow[i].user_id;
 
-    if (this.isMySelf(user.user_id)) {
-      return;
-    }
+          updatedUser.has_admin_role = true; // Set as admin
+          promiseLists.push(this.userService.updateUserRole(updatedUser));
+        }
+      }
+      if (this.ISADMNISTRATOR === 'USER.DISABLE_ADMIN_ACTION') {
+        for (let i = 0; i < this.selectedRow.length; i++) {
+          // Double confirm user is existing
+          if (this.selectedRow[i].user_id === 0 || this.isMySelf(this.selectedRow[i].user_id)) {
+            continue;
+          }
+          let updatedUser: User = new User();
+          updatedUser.user_id = this.selectedRow[i].user_id;
 
-    //Value copy
-    let updatedUser: User = new User();
-    updatedUser.user_id = user.user_id;
+          updatedUser.has_admin_role = false; // Set as none admin
+          promiseLists.push(this.userService.updateUserRole(updatedUser));
+        }
+      }
 
-    if (user.has_admin_role === 0) {
-      updatedUser.has_admin_role = 1;//Set as admin
-    } else {
-      updatedUser.has_admin_role = 0;//Set as none admin
-    }
-
-    this.userService.updateUserRole(updatedUser)
-      .then(() => {
-        //Change view now
-        user.has_admin_role = updatedUser.has_admin_role;
-        this.forceRefreshView(5000);
-      })
-      .catch(error => {
-        this.msgHandler.handleError(error);
-      })
+        Promise.all(promiseLists).then(() => {
+            this.selectedRow = [];
+            this.refresh();
+        })
+        .catch(error => {
+             this.selectedRow = [];
+             this.msgHandler.handleError(error);
+         });
+      }
   }
 
-  //Delete the specified user
-  deleteUser(user: User): void {
-    if (!user) {
+  // Delete the specified user
+  deleteUsers(users: User[]): void {
+    let userArr: string[] = [];
+    this.batchDelectionInfos = [];
+    if (this.onlySelf) {
       return;
     }
 
-    if (this.isMySelf(user.user_id)) {
-      return; //Double confirm
-    }
-
-    //Confirm deletion
+    if (users && users.length) {
+        users.forEach(user => {
+          let initBatchMessage = new BatchInfo ();
+          initBatchMessage.name = user.username;
+          this.batchDelectionInfos.push(initBatchMessage);
+          userArr.push(user.username);
+        });
+      this.deletionDialogService.addBatchInfoList(this.batchDelectionInfos);
+    // Confirm deletion
     let msg: ConfirmationMessage = new ConfirmationMessage(
       "USER.DELETION_TITLE",
       "USER.DELETION_SUMMARY",
-      user.username,
-      user,
+      userArr.join(','),
+      users,
       ConfirmationTargets.USER,
       ConfirmationButtons.DELETE_CANCEL
     );
     this.deletionDialogService.openComfirmDialog(msg);
   }
-
-  delUser(user: User): void {
-    this.userService.deleteUser(user.user_id)
-      .then(() => {
-        //Remove it from current user list
-        //and then view refreshed
-        this.currentTerm = '';
-
-        this.msgHandler.showSuccess("USER.DELETE_SUCCESS");
-        this.refresh();
-      })
-      .catch(error => {
-        this.msgHandler.handleError(error);
-      });
   }
 
-  //Refresh the user list
+  delUser(users: User[]): void {
+    // this.batchInfoDialog.open();
+    let promiseLists: any[] = [];
+    if (users && users.length) {
+      users.forEach(user => {
+        let findedList = this.batchDelectionInfos.find(data => data.name === user.username);
+        if (this.isMySelf(user.user_id)) {
+          this.translate.get('BATCH.DELETED_FAILURE').subscribe(res => {
+            findedList = BathInfoChanges(findedList, res, false, true);
+          });
+        } else {
+          promiseLists.push(this.delOperate(user.user_id, user.username));
+        }
+      });
+
+      Promise.all(promiseLists).then((item) => {
+        this.selectedRow = [];
+        this.currentTerm = '';
+        this.refresh();
+      });
+    }
+  }
+  delOperate(id: number, name:  string) {
+    let findedList = this.batchDelectionInfos.find(data => data.name === name);
+    return this.userService.deleteUser(id).then(() => {
+      this.translate.get('BATCH.DELETED_SUCCESS').subscribe(res => {
+        findedList = BathInfoChanges(findedList, res);
+      });
+    }).catch(error => {
+      this.translate.get('BATCH.DELETED_FAILURE').subscribe(res => {
+        findedList = BathInfoChanges(findedList, res, false, true);
+      });
+     });
+  }
+
+  // Refresh the user list
   refreshUser(from: number, to: number): void {
-    //Start to get
+    this.selectedRow = [];
+    // Start to get
     this.currentTerm = '';
     this.onGoing = true;
 
-    this.originalUsers = this.userService.getUsers()
-      .then(users => {
+    this.originalUsers = this.userService.getUsers();
+    this.originalUsers.then(users => {
         this.onGoing = false;
 
         this.totalCount = users.length;
-        this.users = users.slice(from, to);//First page
+        this.users = users.slice(from, to); // First page
 
         this.forceRefreshView(5000);
 
@@ -248,22 +314,23 @@ export class UserComponent implements OnInit, OnDestroy {
       });
   }
 
-  //Add new user
+  // Add new user
   addNewUser(): void {
     if (!this.canCreateUser) {
-      return;// No response to this hacking action
+      return; // No response to this hacking action
     }
     this.newUserDialog.open();
   }
 
-  //Add user to the user list
+  // Add user to the user list
   addUserToList(user: User): void {
-    //Currently we can only add it by reloading all
+    // Currently we can only add it by reloading all
     this.refresh();
   }
 
-  //Data loading
+  // Data loading
   load(state: any): void {
+    this.selectedRow = [];
     if (state && state.page) {
       if (this.originalUsers) {
         this.originalUsers.then(users => {
@@ -274,18 +341,22 @@ export class UserComponent implements OnInit, OnDestroy {
         this.refreshUser(state.page.from, state.page.to + 1);
       }
     } else {
-      //Refresh
+      // Refresh
       this.refresh();
     }
   }
 
   refresh(): void {
-    this.currentPage = 1;//Refresh pagination
+    this.currentPage = 1; // Refresh pagination
     this.refreshUser(0, 15);
   }
 
+  SelectedChange(): void {
+    this.forceRefreshView(5000);
+  }
+
   forceRefreshView(duration: number): void {
-    //Reset timer
+    // Reset timer
     if (this.timerHandler) {
       clearInterval(this.timerHandler);
     }
@@ -296,6 +367,10 @@ export class UserComponent implements OnInit, OnDestroy {
         this.timerHandler = null;
       }
     }, duration);
+  }
+
+  private isMatchFilterTerm(terms: string, testedItem: string): boolean {
+    return testedItem.toLowerCase().indexOf(terms.toLowerCase()) !== -1;
   }
 
 }

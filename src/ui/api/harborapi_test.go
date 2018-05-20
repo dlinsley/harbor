@@ -40,6 +40,8 @@ import (
 	"github.com/dghubble/sling"
 
 	//for test env prepare
+	"github.com/vmware/harbor/src/replication/core"
+	_ "github.com/vmware/harbor/src/replication/event"
 	_ "github.com/vmware/harbor/src/ui/auth/db"
 	_ "github.com/vmware/harbor/src/ui/auth/ldap"
 )
@@ -83,8 +85,10 @@ func init() {
 		log.Fatalf("failed to get database configurations: %v", err)
 	}
 	dao.InitDatabase(database)
-	_, file, _, _ := runtime.Caller(1)
-	apppath, _ := filepath.Abs(filepath.Dir(filepath.Join(file, ".."+string(filepath.Separator))))
+	_, file, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(file)
+	dir = filepath.Join(dir, "..")
+	apppath, _ := filepath.Abs(dir)
 	beego.BConfig.WebConfig.Session.SessionOn = true
 	beego.TestBeegoInit(apppath)
 
@@ -93,19 +97,27 @@ func init() {
 
 	beego.Router("/api/search/", &SearchAPI{})
 	beego.Router("/api/projects/", &ProjectAPI{}, "get:List;post:Post;head:Head")
-	beego.Router("/api/projects/:id", &ProjectAPI{}, "delete:Delete;get:Get")
+	beego.Router("/api/projects/:id", &ProjectAPI{}, "delete:Delete;get:Get;put:Put")
 	beego.Router("/api/users/:id", &UserAPI{}, "get:Get")
 	beego.Router("/api/users", &UserAPI{}, "get:List;post:Post;delete:Delete;put:Put")
 	beego.Router("/api/users/:id([0-9]+)/password", &UserAPI{}, "put:ChangePassword")
 	beego.Router("/api/users/:id/sysadmin", &UserAPI{}, "put:ToggleUserAdminRole")
-	beego.Router("/api/projects/:id/publicity", &ProjectAPI{}, "put:ToggleProjectPublic")
 	beego.Router("/api/projects/:id([0-9]+)/logs", &ProjectAPI{}, "get:Logs")
 	beego.Router("/api/projects/:id([0-9]+)/_deletable", &ProjectAPI{}, "get:Deletable")
-	beego.Router("/api/projects/:pid([0-9]+)/members/?:mid", &ProjectMemberAPI{}, "get:Get;post:Post;delete:Delete;put:Put")
+	beego.Router("/api/projects/:id([0-9]+)/metadatas/?:name", &MetadataAPI{}, "get:Get")
+	beego.Router("/api/projects/:id([0-9]+)/metadatas/", &MetadataAPI{}, "post:Post")
+	beego.Router("/api/projects/:id([0-9]+)/metadatas/:name", &MetadataAPI{}, "put:Put;delete:Delete")
+	beego.Router("/api/projects/:pid([0-9]+)/members/?:pmid([0-9]+)", &ProjectMemberAPI{})
 	beego.Router("/api/repositories", &RepositoryAPI{})
 	beego.Router("/api/statistics", &StatisticAPI{})
 	beego.Router("/api/users/?:id", &UserAPI{})
+	beego.Router("/api/usergroups/?:ugid([0-9]+)", &UserGroupAPI{})
 	beego.Router("/api/logs", &LogAPI{})
+	beego.Router("/api/repositories/*", &RepositoryAPI{}, "put:Put")
+	beego.Router("/api/repositories/*/labels", &RepositoryLabelAPI{}, "get:GetOfRepository;post:AddToRepository")
+	beego.Router("/api/repositories/*/labels/:id([0-9]+", &RepositoryLabelAPI{}, "delete:RemoveFromRepository")
+	beego.Router("/api/repositories/*/tags/:tag/labels", &RepositoryLabelAPI{}, "get:GetOfImage;post:AddToImage")
+	beego.Router("/api/repositories/*/tags/:tag/labels/:id([0-9]+", &RepositoryLabelAPI{}, "delete:RemoveFromImage")
 	beego.Router("/api/repositories/*/tags/:tag", &RepositoryAPI{}, "delete:Delete;get:GetTag")
 	beego.Router("/api/repositories/*/tags", &RepositoryAPI{}, "get:GetTags")
 	beego.Router("/api/repositories/*/tags/:tag/manifest", &RepositoryAPI{}, "get:GetManifests")
@@ -116,11 +128,9 @@ func init() {
 	beego.Router("/api/targets/:id([0-9]+)", &TargetAPI{})
 	beego.Router("/api/targets/:id([0-9]+)/policies/", &TargetAPI{}, "get:ListPolicies")
 	beego.Router("/api/targets/ping", &TargetAPI{}, "post:Ping")
-	beego.Router("/api/targets/:id([0-9]+)/ping", &TargetAPI{}, "post:PingByID")
 	beego.Router("/api/policies/replication/:id([0-9]+)", &RepPolicyAPI{})
 	beego.Router("/api/policies/replication", &RepPolicyAPI{}, "get:List")
 	beego.Router("/api/policies/replication", &RepPolicyAPI{}, "post:Post;delete:Delete")
-	beego.Router("/api/policies/replication/:id([0-9]+)/enablement", &RepPolicyAPI{}, "put:UpdateEnablement")
 	beego.Router("/api/systeminfo", &SystemInfoAPI{}, "get:GetGeneralInfo")
 	beego.Router("/api/systeminfo/volumes", &SystemInfoAPI{}, "get:GetVolumeInfo")
 	beego.Router("/api/systeminfo/getcert", &SystemInfoAPI{}, "get:GetCert")
@@ -128,8 +138,15 @@ func init() {
 	beego.Router("/api/configurations", &ConfigAPI{})
 	beego.Router("/api/configurations/reset", &ConfigAPI{}, "post:Reset")
 	beego.Router("/api/email/ping", &EmailAPI{}, "post:Ping")
-
+	beego.Router("/api/replications", &ReplicationAPI{})
+	beego.Router("/api/labels", &LabelAPI{}, "post:Post;get:List")
+	beego.Router("/api/labels/:id([0-9]+", &LabelAPI{}, "get:Get;put:Put;delete:Delete")
+	beego.Router("/api/ping", &SystemInfoAPI{}, "get:Ping")
 	_ = updateInitPassword(1, "Harbor12345")
+
+	if err := core.Init(); err != nil {
+		log.Fatalf("failed to initialize GlobalController: %v", err)
+	}
 
 	//syncRegistry
 	if err := SyncRegistry(config.GlobalProjectMgr); err != nil {
@@ -359,18 +376,10 @@ func (a testapi) ProjectsGet(query *apilib.ProjectQuery, authInfo ...usrInfo) (i
 }
 
 //Update properties for a selected project.
-func (a testapi) ToggleProjectPublicity(prjUsr usrInfo, projectID string, ispublic int32) (int, error) {
-	// create path and map variables
-	path := "/api/projects/" + projectID + "/publicity/"
-	_sling := sling.New().Put(a.basePath)
-
-	_sling = _sling.Path(path)
-
-	type QueryParams struct {
-		Public int32 `json:"public,omitempty"`
-	}
-
-	_sling = _sling.BodyJSON(&QueryParams{Public: ispublic})
+func (a testapi) ProjectsPut(prjUsr usrInfo, projectID string,
+	project *models.Project) (int, error) {
+	path := "/api/projects/" + projectID
+	_sling := sling.New().Put(a.basePath).Path(path).BodyJSON(project)
 
 	httpStatusCode, _, err := request(_sling, jsonAcceptHeader, prjUsr)
 	return httpStatusCode, err
@@ -430,12 +439,13 @@ func (a testapi) GetProjectMembersByProID(prjUsr usrInfo, projectID string) (int
 }
 
 //Add project role member accompany with  projectID
-func (a testapi) AddProjectMember(prjUsr usrInfo, projectID string, roles apilib.RoleParam) (int, error) {
+//func (a testapi) AddProjectMember(prjUsr usrInfo, projectID string, roles apilib.RoleParam) (int, error) {
+func (a testapi) AddProjectMember(prjUsr usrInfo, projectID string, member *models.MemberReq) (int, error) {
 	_sling := sling.New().Post(a.basePath)
 
 	path := "/api/projects/" + projectID + "/members/"
 	_sling = _sling.Path(path)
-	_sling = _sling.BodyJSON(roles)
+	_sling = _sling.BodyJSON(member)
 	httpStatusCode, _, err := request(_sling, jsonAcceptHeader, prjUsr)
 	return httpStatusCode, err
 
@@ -642,18 +652,6 @@ func (a testapi) PingTarget(authInfo usrInfo, body interface{}) (int, error) {
 	return httpStatusCode, err
 }
 
-//PingTargetByID ...
-func (a testapi) PingTargetByID(authInfo usrInfo, id int) (int, error) {
-	_sling := sling.New().Post(a.basePath)
-
-	path := fmt.Sprintf("/api/targets/%d/ping", id)
-
-	_sling = _sling.Path(path)
-
-	httpStatusCode, _, err := request(_sling, jsonAcceptHeader, authInfo)
-	return httpStatusCode, err
-}
-
 //Get target by targetID
 func (a testapi) GetTargetByID(authInfo usrInfo, targetID string) (int, error) {
 	_sling := sling.New().Get(a.basePath)
@@ -717,7 +715,10 @@ func (a testapi) AddPolicy(authInfo usrInfo, repPolicy apilib.RepPolicyPost) (in
 	_sling = _sling.Path(path)
 	_sling = _sling.BodyJSON(repPolicy)
 
-	httpStatusCode, _, err := request(_sling, jsonAcceptHeader, authInfo)
+	httpStatusCode, body, err := request(_sling, jsonAcceptHeader, authInfo)
+	if httpStatusCode != http.StatusCreated {
+		log.Println(string(body))
+	}
 	return httpStatusCode, err
 }
 
@@ -918,13 +919,13 @@ func (a testapi) UsersPut(userID int, profile apilib.UserProfile, authInfo usrIn
 }
 
 //Update a registered user to be an administrator of Harbor.
-func (a testapi) UsersToggleAdminRole(userID int, authInfo usrInfo, hasAdminRole int32) (int, error) {
+func (a testapi) UsersToggleAdminRole(userID int, authInfo usrInfo, hasAdminRole bool) (int, error) {
 	_sling := sling.New().Put(a.basePath)
 	// create path and map variables
 	path := "/api/users/" + fmt.Sprintf("%d", userID) + "/sysadmin"
 	_sling = _sling.Path(path)
 	type QueryParams struct {
-		HasAdminRole int32 `json:"has_admin_role,omitempty"`
+		HasAdminRole bool `json:"has_admin_role,omitempty"`
 	}
 
 	_sling = _sling.BodyJSON(&QueryParams{HasAdminRole: hasAdminRole})
@@ -994,6 +995,11 @@ func (a testapi) GetGeneralInfo() (int, []byte, error) {
 	return request(_sling, jsonAcceptHeader)
 }
 
+func (a testapi) Ping() (int, []byte, error) {
+	_sling := sling.New().Get(a.basePath).Path("/api/ping")
+	return request(_sling, jsonAcceptHeader)
+}
+
 //Get system cert
 func (a testapi) CertGet(authInfo usrInfo) (int, []byte, error) {
 	_sling := sling.New().Get(a.basePath)
@@ -1052,5 +1058,50 @@ func (a testapi) PingEmail(authInfo usrInfo, settings []byte) (int, string, erro
 
 	code, body, err := request(_sling, jsonAcceptHeader, authInfo)
 
+	return code, string(body), err
+}
+
+func (a testapi) PostMeta(authInfor usrInfo, projectID int64, metas map[string]string) (int, string, error) {
+	_sling := sling.New().Base(a.basePath).
+		Post(fmt.Sprintf("/api/projects/%d/metadatas/", projectID)).
+		BodyJSON(metas)
+
+	code, body, err := request(_sling, jsonAcceptHeader, authInfor)
+	return code, string(body), err
+}
+
+func (a testapi) PutMeta(authInfor usrInfo, projectID int64, name string,
+	metas map[string]string) (int, string, error) {
+	_sling := sling.New().Base(a.basePath).
+		Put(fmt.Sprintf("/api/projects/%d/metadatas/%s", projectID, name)).
+		BodyJSON(metas)
+
+	code, body, err := request(_sling, jsonAcceptHeader, authInfor)
+	return code, string(body), err
+}
+
+func (a testapi) GetMeta(authInfor usrInfo, projectID int64, name ...string) (int, map[string]string, error) {
+	_sling := sling.New().Base(a.basePath).
+		Get(fmt.Sprintf("/api/projects/%d/metadatas/", projectID))
+	if len(name) > 0 {
+		_sling = _sling.Path(name[0])
+	}
+
+	code, body, err := request(_sling, jsonAcceptHeader, authInfor)
+	if err == nil && code == http.StatusOK {
+		metas := map[string]string{}
+		if err := json.Unmarshal(body, &metas); err != nil {
+			return 0, nil, err
+		}
+		return code, metas, nil
+	}
+	return code, nil, err
+}
+
+func (a testapi) DeleteMeta(authInfor usrInfo, projectID int64, name string) (int, string, error) {
+	_sling := sling.New().Base(a.basePath).
+		Delete(fmt.Sprintf("/api/projects/%d/metadatas/%s", projectID, name))
+
+	code, body, err := request(_sling, jsonAcceptHeader, authInfor)
 	return code, string(body), err
 }

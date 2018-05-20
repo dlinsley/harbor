@@ -42,7 +42,7 @@ type ProjectAPI struct {
 	project *models.Project
 }
 
-const projectNameMaxLen int = 30
+const projectNameMaxLen int = 255
 const projectNameMinLen int = 2
 const restrictedNameChars = `[a-z0-9]+(?:[._-][a-z0-9]+)*`
 
@@ -120,14 +120,23 @@ func (p *ProjectAPI) Post() {
 		return
 	}
 
+	if pro.Metadata == nil {
+		pro.Metadata = map[string]string{}
+	}
+	// accept the "public" property to make replication work well with old versions(<=1.2.0)
+	if pro.Public != nil && len(pro.Metadata[models.ProMetaPublic]) == 0 {
+		pro.Metadata[models.ProMetaPublic] = strconv.FormatBool(*pro.Public == 1)
+	}
+
+	// populate public metadata as false if it isn't set
+	if _, ok := pro.Metadata[models.ProMetaPublic]; !ok {
+		pro.Metadata[models.ProMetaPublic] = strconv.FormatBool(false)
+	}
+
 	projectID, err := p.ProjectMgr.Create(&models.Project{
-		Name:                                       pro.Name,
-		Public:                                     pro.Public,
-		OwnerName:                                  p.SecurityCtx.GetUsername(),
-		EnableContentTrust:                         pro.EnableContentTrust,
-		PreventVulnerableImagesFromRunning:         pro.PreventVulnerableImagesFromRunning,
-		PreventVulnerableImagesFromRunningSeverity: pro.PreventVulnerableImagesFromRunningSeverity,
-		AutomaticallyScanImagesOnPush:              pro.AutomaticallyScanImagesOnPush,
+		Name:      pro.Name,
+		OwnerName: p.SecurityCtx.GetUsername(),
+		Metadata:  pro.Metadata,
 	})
 	if err != nil {
 		if err == errutil.ErrDupProject {
@@ -178,7 +187,7 @@ func (p *ProjectAPI) Head() {
 
 // Get ...
 func (p *ProjectAPI) Get() {
-	if p.project.Public == 0 {
+	if !p.project.IsPublic() {
 		if !p.SecurityCtx.IsAuthenticated() {
 			p.HandleUnauthorized()
 			return
@@ -189,6 +198,8 @@ func (p *ProjectAPI) Get() {
 			return
 		}
 	}
+
+	p.populateProperties(p.project)
 
 	p.Data["json"] = p.project
 	p.ServeJSON()
@@ -259,7 +270,9 @@ func (p *ProjectAPI) Deletable() {
 }
 
 func deletable(projectID int64) (*deletableResp, error) {
-	count, err := dao.GetTotalOfRepositoriesByProject([]int64{projectID}, "")
+	count, err := dao.GetTotalOfRepositories(&models.RepositoryQuery{
+		ProjectIDs: []int64{projectID},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -311,46 +324,56 @@ func (p *ProjectAPI) List() {
 		query.Public = &pub
 	}
 
-	// base project collection from which filter is done
-	base := &models.BaseProjectCollection{}
-	if !p.SecurityCtx.IsAuthenticated() {
-		// not login, only get public projects
-		base.Public = true
-	} else {
-		if !(p.SecurityCtx.IsSysAdmin() || p.SecurityCtx.IsSolutionUser()) {
-			// login, but not system admin, get public projects and
-			// projects that the user is member of
-			base.Member = p.SecurityCtx.GetUsername()
-			base.Public = true
+	// standalone, filter projects according to the privilleges of the user first
+	if !config.WithAdmiral() {
+		var projects []*models.Project
+		if !p.SecurityCtx.IsAuthenticated() {
+			// not login, only get public projects
+			pros, err := p.ProjectMgr.GetPublic()
+			if err != nil {
+				p.HandleInternalServerError(fmt.Sprintf("failed to get public projects: %v", err))
+				return
+			}
+			projects = []*models.Project{}
+			projects = append(projects, pros...)
+		} else {
+			if !(p.SecurityCtx.IsSysAdmin() || p.SecurityCtx.IsSolutionUser()) {
+				projects = []*models.Project{}
+				// login, but not system admin or solution user, get public projects and
+				// projects that the user is member of
+				pros, err := p.ProjectMgr.GetPublic()
+				if err != nil {
+					p.HandleInternalServerError(fmt.Sprintf("failed to get public projects: %v", err))
+					return
+				}
+				projects = append(projects, pros...)
+				mps, err := p.SecurityCtx.GetMyProjects()
+				if err != nil {
+					p.HandleInternalServerError(fmt.Sprintf("failed to list projects: %v", err))
+					return
+				}
+				projects = append(projects, mps...)
+			}
+		}
+		//Query projects by user group
+
+		if projects != nil {
+			projectIDs := []int64{}
+			for _, project := range projects {
+				projectIDs = append(projectIDs, project.ProjectID)
+			}
+			query.ProjectIDs = projectIDs
 		}
 	}
 
-	result, err := p.ProjectMgr.List(query, base)
+	result, err := p.ProjectMgr.List(query)
 	if err != nil {
 		p.ParseAndHandleError("failed to list projects", err)
 		return
 	}
 
 	for _, project := range result.Projects {
-		if p.SecurityCtx.IsAuthenticated() {
-			roles := p.SecurityCtx.GetProjectRoles(project.ProjectID)
-			if len(roles) != 0 {
-				project.Role = roles[0]
-			}
-
-			if project.Role == common.RoleProjectAdmin ||
-				p.SecurityCtx.IsSysAdmin() {
-				project.Togglable = true
-			}
-		}
-
-		repos, err := dao.GetRepositoryByProjectName(project.Name)
-		if err != nil {
-			log.Errorf("failed to get repositories of project %s: %v", project.Name, err)
-			p.CustomAbort(http.StatusInternalServerError, "")
-		}
-
-		project.RepoCount = len(repos)
+		p.populateProperties(project)
 	}
 
 	p.SetPaginationHeader(result.Total, page, size)
@@ -358,8 +381,32 @@ func (p *ProjectAPI) List() {
 	p.ServeJSON()
 }
 
-// ToggleProjectPublic ...
-func (p *ProjectAPI) ToggleProjectPublic() {
+func (p *ProjectAPI) populateProperties(project *models.Project) {
+	if p.SecurityCtx.IsAuthenticated() {
+		roles := p.SecurityCtx.GetProjectRoles(project.ProjectID)
+		if len(roles) != 0 {
+			project.Role = roles[0]
+		}
+
+		if project.Role == common.RoleProjectAdmin ||
+			p.SecurityCtx.IsSysAdmin() {
+			project.Togglable = true
+		}
+	}
+
+	total, err := dao.GetTotalOfRepositories(&models.RepositoryQuery{
+		ProjectIDs: []int64{project.ProjectID},
+	})
+	if err != nil {
+		log.Errorf("failed to get total of repositories of project %d: %v", project.ProjectID, err)
+		p.CustomAbort(http.StatusInternalServerError, "")
+	}
+
+	project.RepoCount = total
+}
+
+// Put ...
+func (p *ProjectAPI) Put() {
 	if !p.SecurityCtx.IsAuthenticated() {
 		p.HandleUnauthorized()
 		return
@@ -372,16 +419,10 @@ func (p *ProjectAPI) ToggleProjectPublic() {
 
 	var req *models.ProjectRequest
 	p.DecodeJSONReq(&req)
-	if req.Public != 0 && req.Public != 1 {
-		p.HandleBadRequest("public should be 0 or 1")
-		return
-	}
 
 	if err := p.ProjectMgr.Update(p.project.ProjectID,
 		&models.Project{
-			Metadata: map[string]string{
-				models.ProMetaPublic: strconv.Itoa(req.Public),
-			},
+			Metadata: req.Metadata,
 		}); err != nil {
 		p.ParseAndHandleError(fmt.Sprintf("failed to update project %d",
 			p.project.ProjectID), err)
@@ -457,12 +498,19 @@ func (p *ProjectAPI) Logs() {
 func validateProjectReq(req *models.ProjectRequest) error {
 	pn := req.Name
 	if isIllegalLength(req.Name, projectNameMinLen, projectNameMaxLen) {
-		return fmt.Errorf("Project name is illegal in length. (greater than 2 or less than 30)")
+		return fmt.Errorf("Project name is illegal in length. (greater than %d or less than %d)", projectNameMaxLen, projectNameMinLen)
 	}
 	validProjectName := regexp.MustCompile(`^` + restrictedNameChars + `$`)
 	legal := validProjectName.MatchString(pn)
 	if !legal {
 		return fmt.Errorf("project name is not in lower case or contains illegal characters")
 	}
+
+	metas, err := validateProjectMetadata(req.Metadata)
+	if err != nil {
+		return err
+	}
+
+	req.Metadata = metas
 	return nil
 }

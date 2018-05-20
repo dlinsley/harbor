@@ -18,7 +18,6 @@ import { TranslateService } from '@ngx-translate/core';
 import { ModalEvent } from '../modal-event';
 import { modalEvents } from '../modal-events.const';
 
-import { SessionUser } from '../../shared/session-user';
 import { SessionService } from '../../shared/session.service';
 import { CookieService, CookieOptions } from 'ngx-cookie';
 
@@ -26,11 +25,12 @@ import { supportedLangs, enLang, languageNames, CommonRoutes } from '../../share
 import { AppConfigService } from '../../app-config.service';
 import { SearchTriggerService } from '../global-search/search-trigger.service';
 import { MessageHandlerService } from '../../shared/message-handler/message-handler.service';
+import {SkinableConfig} from "../../skinable-config.service";
 
 @Component({
     selector: 'navigator',
     templateUrl: "navigator.component.html",
-    styleUrls: ["navigator.component.css"]
+    styleUrls: ["navigator.component.scss"]
 })
 
 export class NavigatorComponent implements OnInit {
@@ -40,6 +40,8 @@ export class NavigatorComponent implements OnInit {
 
     selectedLang: string = enLang;
     appTitle: string = 'APP_TITLE.HARBOR';
+    customStyle: {[key: string]: any};
+    customProjectName: {[key: string]: any};
 
     constructor(
         private session: SessionService,
@@ -48,20 +50,33 @@ export class NavigatorComponent implements OnInit {
         private cookie: CookieService,
         private appConfigService: AppConfigService,
         private msgHandler: MessageHandlerService,
-        private searchTrigger: SearchTriggerService) {
-
+        private searchTrigger: SearchTriggerService,
+        private skinableConfig: SkinableConfig) {
     }
 
     ngOnInit(): void {
+        // custom skin
+        let customSkinObj = this.skinableConfig.getSkinConfig();
+        if (customSkinObj) {
+            if (customSkinObj.projects) {
+                this.customProjectName = customSkinObj.projects;
+            }
+            this.customStyle = customSkinObj;
+        }
+
         this.selectedLang = this.translate.currentLang;
         this.translate.onLangChange.subscribe((langChange: {lang: string}) => {
             this.selectedLang = langChange.lang;
-            //Keep in cookie for next use
-            let opt:CookieOptions = {path: '/', expires: new Date(Date.now() + 3600*1000*24*31)};
+            // Keep in cookie for next use
+            let opt: CookieOptions = {path: '/', expires: new Date(Date.now() + 3600 * 1000 * 24 * 31)};
             this.cookie.put("harbor-lang", langChange.lang, opt);
         });
         if (this.appConfigService.isIntegrationMode()) {
             this.appTitle = 'APP_TITLE.VIC';
+        }
+
+        if (this.appConfigService.getConfig().read_only) {
+            this.msgHandler.handleReadOnly();
         }
     }
 
@@ -87,7 +102,7 @@ export class NavigatorComponent implements OnInit {
 
     public get canDownloadCert(): boolean {
         return this.session.getCurrentUser() &&
-            this.session.getCurrentUser().has_admin_role > 0 &&
+            this.session.getCurrentUser().has_admin_role &&
             this.appConfigService.getConfig() &&
             this.appConfigService.getConfig().has_ca_root;
     }
@@ -95,15 +110,16 @@ export class NavigatorComponent implements OnInit {
     public get canChangePassword(): boolean {
         let user = this.session.getCurrentUser();
         let config = this.appConfigService.getConfig();
-        
-        return user && ((config && config.auth_mode != 'ldap_auth') || (user.user_id === 1 && user.username === 'admin'));
+
+        return user && ((config && !(config.auth_mode === "ldap_auth" || config.auth_mode === "uaa_auth")) ||
+        (user.user_id === 1 && user.username === "admin"));
     }
 
     matchLang(lang: string): boolean {
         return lang.trim() === this.selectedLang;
     }
 
-    //Open the account setting dialog
+    // Open the account setting dialog
     openAccountSettingsModal(): void {
         this.showAccountSettingsModal.emit({
             modalName: modalEvents.USER_PROFILE,
@@ -111,7 +127,7 @@ export class NavigatorComponent implements OnInit {
         });
     }
 
-    //Open change password dialog
+    // Open change password dialog
     openChangePwdModal(): void {
         this.showPwdChangeModal.emit({
             modalName: modalEvents.CHANGE_PWD,
@@ -119,7 +135,7 @@ export class NavigatorComponent implements OnInit {
         });
     }
 
-    //Open about dialog
+    // Open about dialog
     openAboutDialog(): void {
         this.showPwdChangeModal.emit({
             modalName: modalEvents.ABOUT,
@@ -127,21 +143,21 @@ export class NavigatorComponent implements OnInit {
         });
     }
 
-    //Log out system
+    // Log out system
     logOut(): void {
-        //Naviagte to the sign in route
-        //Appending 'signout' means destroy session cache
+        // Naviagte to the sign in route
+        // Appending 'signout' means destroy session cache
         let navigatorExtra: NavigationExtras = {
             queryParams: { "signout": true }
         };
         this.router.navigate([CommonRoutes.EMBEDDED_SIGN_IN], navigatorExtra);
-        //Confirm search result panel is close
+        // Confirm search result panel is close
         this.searchTrigger.closeSearch(true);
     }
 
-    //Switch languages
+    // Switch languages
     switchLanguage(lang: string): void {
-        let selectedLang: string = enLang;//Default
+        let selectedLang: string = enLang; // Default
         if (supportedLangs.find(supportedLang => supportedLang === lang.trim())) {
             selectedLang = lang;
         } else {
@@ -151,17 +167,17 @@ export class NavigatorComponent implements OnInit {
         this.translate.use(selectedLang).subscribe(() => window.location.reload());
     }
 
-    //Handle the home action
+    // Handle the home action
     homeAction(): void {
         if (this.session.getCurrentUser() != null) {
-            //Navigate to default page
+            // Navigate to default page
             this.router.navigate([CommonRoutes.HARBOR_DEFAULT]);
         } else {
-            //Naviagte to signin page
+            // Naviagte to signin page
             this.router.navigate([CommonRoutes.HARBOR_ROOT]);
         }
 
-        //Confirm search result panel is close
+        // Confirm search result panel is close
         this.searchTrigger.closeSearch(true);
     }
 

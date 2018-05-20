@@ -22,16 +22,20 @@ import (
 
 	enpt "github.com/vmware/harbor/src/adminserver/systemcfg/encrypt"
 	"github.com/vmware/harbor/src/adminserver/systemcfg/store"
+	"github.com/vmware/harbor/src/adminserver/systemcfg/store/database"
 	"github.com/vmware/harbor/src/adminserver/systemcfg/store/encrypt"
 	"github.com/vmware/harbor/src/adminserver/systemcfg/store/json"
 	"github.com/vmware/harbor/src/common"
 	comcfg "github.com/vmware/harbor/src/common/config"
+	"github.com/vmware/harbor/src/common/dao"
+	"github.com/vmware/harbor/src/common/models"
 	"github.com/vmware/harbor/src/common/utils/log"
 )
 
 const (
 	defaultJSONCfgStorePath string = "/etc/adminserver/config/config.json"
 	defaultKeyPath          string = "/etc/adminserver/key"
+	ldapScopeKey            string = "ldap_scope"
 )
 
 var (
@@ -43,9 +47,10 @@ var (
 	attrs = []string{
 		common.EmailPassword,
 		common.LDAPSearchPwd,
-		common.MySQLPassword,
+		common.PostGreSQLPassword,
 		common.AdminInitialPassword,
 		common.ClairDBPassword,
+		common.UAAClientSecret,
 	}
 
 	// all configurations need read from environment variables
@@ -56,28 +61,39 @@ var (
 			env:   "SELF_REGISTRATION",
 			parse: parseStringToBool,
 		},
-		common.DatabaseType: "DATABASE_TYPE",
-		common.MySQLHost:    "MYSQL_HOST",
-		common.MySQLPort: &parser{
-			env:   "MYSQL_PORT",
+		common.DatabaseType:   "DATABASE_TYPE",
+		common.PostGreSQLHOST: "POSTGRESQL_HOST",
+		common.PostGreSQLPort: &parser{
+			env:   "POSTGRESQL_PORT",
 			parse: parseStringToInt,
 		},
-		common.MySQLUsername: "MYSQL_USR",
-		common.MySQLPassword: "MYSQL_PWD",
-		common.MySQLDatabase: "MYSQL_DATABASE",
-		common.SQLiteFile:    "SQLITE_FILE",
-		common.LDAPURL:       "LDAP_URL",
-		common.LDAPSearchDN:  "LDAP_SEARCH_DN",
-		common.LDAPSearchPwd: "LDAP_SEARCH_PWD",
-		common.LDAPBaseDN:    "LDAP_BASE_DN",
-		common.LDAPFilter:    "LDAP_FILTER",
-		common.LDAPUID:       "LDAP_UID",
+		common.PostGreSQLUsername: "POSTGRESQL_USERNAME",
+		common.PostGreSQLPassword: "POSTGRESQL_PASSWORD",
+		common.PostGreSQLDatabase: "POSTGRESQL_DATABASE",
+		common.PostGreSQLSSLMode:  "POSTGRESQL_SSLMODE",
+		common.LDAPURL:            "LDAP_URL",
+		common.LDAPSearchDN:       "LDAP_SEARCH_DN",
+		common.LDAPSearchPwd:      "LDAP_SEARCH_PWD",
+		common.LDAPBaseDN:         "LDAP_BASE_DN",
+		common.LDAPFilter:         "LDAP_FILTER",
+		common.LDAPUID:            "LDAP_UID",
 		common.LDAPScope: &parser{
 			env:   "LDAP_SCOPE",
 			parse: parseStringToInt,
 		},
 		common.LDAPTimeout: &parser{
 			env:   "LDAP_TIMEOUT",
+			parse: parseStringToInt,
+		},
+		common.LDAPVerifyCert: &parser{
+			env:   "LDAP_VERIFY_CERT",
+			parse: parseStringToBool,
+		},
+		common.LDAPGroupBaseDN:        "LDAP_GROUP_BASEDN",
+		common.LDAPGroupSearchFilter:  "LDAP_GROUP_FILTER",
+		common.LDAPGroupAttributeName: "LDAP_GROUP_GID",
+		common.LDAPGroupSearchScope: &parser{
+			env:   "LDAP_GROUP_SCOPE",
 			parse: parseStringToInt,
 		},
 		common.EmailHost: "EMAIL_HOST",
@@ -110,10 +126,6 @@ var (
 			env:   "MAX_JOB_WORKERS",
 			parse: parseStringToInt,
 		},
-		common.VerifyRemoteCert: &parser{
-			env:   "VERIFY_REMOTE_CERT",
-			parse: parseStringToBool,
-		},
 		common.ProjectCreationRestriction: "PROJECT_CREATION_RESTRICTION",
 		common.AdminInitialPassword:       "HARBOR_ADMIN_PASSWORD",
 		common.AdmiralEndpoint:            "ADMIRAL_URL",
@@ -126,13 +138,45 @@ var (
 			parse: parseStringToBool,
 		},
 		common.ClairDBPassword: "CLAIR_DB_PASSWORD",
+		common.ClairDB:         "CLAIR_DB",
+		common.ClairDBUsername: "CLAIR_DB_USERNAME",
+		common.ClairDBHost:     "CLAIR_DB_HOST",
+		common.ClairDBPort: &parser{
+			env:   "CLAIR_DB_PORT",
+			parse: parseStringToInt,
+		},
+		common.UAAEndpoint:     "UAA_ENDPOINT",
+		common.UAAClientID:     "UAA_CLIENTID",
+		common.UAAClientSecret: "UAA_CLIENTSECRET",
+		common.UAAVerifyCert: &parser{
+			env:   "UAA_VERIFY_CERT",
+			parse: parseStringToBool,
+		},
+		common.UIURL:                       "UI_URL",
+		common.JobServiceURL:               "JOBSERVICE_URL",
+		common.TokenServiceURL:             "TOKEN_SERVICE_URL",
+		common.ClairURL:                    "CLAIR_URL",
+		common.NotaryURL:                   "NOTARY_URL",
+		common.RegistryStorageProviderName: "REGISTRY_STORAGE_PROVIDER_NAME",
+		common.ReadOnly: &parser{
+			env:   "READ_ONLY",
+			parse: parseStringToBool,
+		},
 	}
 
 	// configurations need read from environment variables
 	// every time the system startup
 	repeatLoadEnvs = map[string]interface{}{
-		common.ExtEndpoint:   "EXT_ENDPOINT",
-		common.MySQLPassword: "MYSQL_PWD",
+		common.ExtEndpoint:    "EXT_ENDPOINT",
+		common.PostGreSQLHOST: "POSTGRESQL_HOST",
+		common.PostGreSQLPort: &parser{
+			env:   "POSTGRESQL_PORT",
+			parse: parseStringToInt,
+		},
+		common.PostGreSQLUsername: "POSTGRESQL_USERNAME",
+		common.PostGreSQLPassword: "POSTGRESQL_PASSWORD",
+		common.PostGreSQLDatabase: "POSTGRESQL_DATABASE",
+		common.PostGreSQLSSLMode:  "POSTGRESQL_SSLMODE",
 		common.MaxJobWorkers: &parser{
 			env:   "MAX_JOB_WORKERS",
 			parse: parseStringToInt,
@@ -151,6 +195,26 @@ var (
 			parse: parseStringToBool,
 		},
 		common.ClairDBPassword: "CLAIR_DB_PASSWORD",
+		common.ClairDBHost:     "CLAIR_DB_HOST",
+		common.ClairDBUsername: "CLAIR_DB_USERNAME",
+		common.ClairDBPort: &parser{
+			env:   "CLAIR_DB_PORT",
+			parse: parseStringToInt,
+		},
+		common.UAAEndpoint:     "UAA_ENDPOINT",
+		common.UAAClientID:     "UAA_CLIENTID",
+		common.UAAClientSecret: "UAA_CLIENTSECRET",
+		common.UAAVerifyCert: &parser{
+			env:   "UAA_VERIFY_CERT",
+			parse: parseStringToBool,
+		},
+		common.RegistryStorageProviderName: "REGISTRY_STORAGE_PROVIDER_NAME",
+		common.UIURL:                       "UI_URL",
+		common.JobServiceURL:               "JOBSERVICE_URL",
+		common.RegistryURL:                 "REGISTRY_URL",
+		common.TokenServiceURL:             "TOKEN_SERVICE_URL",
+		common.ClairURL:                    "CLAIR_URL",
+		common.NotaryURL:                   "NOTARY_URL",
 	}
 )
 
@@ -206,17 +270,66 @@ func Init() (err error) {
 }
 
 func initCfgStore() (err error) {
+
+	drivertype := os.Getenv("CFG_DRIVER")
+	if len(drivertype) == 0 {
+		drivertype = common.CfgDriverDB
+	}
 	path := os.Getenv("JSON_CFG_STORE_PATH")
 	if len(path) == 0 {
 		path = defaultJSONCfgStorePath
 	}
 	log.Infof("the path of json configuration storage: %s", path)
 
-	CfgStore, err = json.NewCfgStore(path)
-	if err != nil {
-		return
-	}
+	if drivertype == common.CfgDriverDB {
+		//init database
+		cfgs := map[string]interface{}{}
+		if err = LoadFromEnv(cfgs, true); err != nil {
+			return err
+		}
+		cfgdb := GetDatabaseFromCfg(cfgs)
+		if err = dao.InitDatabase(cfgdb); err != nil {
+			return err
+		}
+		CfgStore, err = database.NewCfgStore()
+		if err != nil {
+			return err
+		}
+		//migration check: if no data in the db , then will try to load from path
+		m, err := CfgStore.Read()
+		if err != nil {
+			return err
+		}
+		if m == nil || len(m) == 0 {
+			if _, err := os.Stat(path); err == nil {
+				jsondriver, err := json.NewCfgStore(path)
+				if err != nil {
+					log.Errorf("Failed to migrate configuration from %s", path)
+					return err
+				}
+				jsonconfig, err := jsondriver.Read()
+				if err != nil {
+					log.Errorf("Failed to read old configuration from %s", path)
+					return err
+				}
+				// Update LDAP Scope for migration
+				// only used when migrating harbor release before v1.3
+				// after v1.3 there is always a db configuration before migrate.
+				validLdapScope(jsonconfig, true)
 
+				err = CfgStore.Write(jsonconfig)
+				if err != nil {
+					log.Error("Failed to update old configuration to database")
+					return err
+				}
+			}
+		}
+	} else {
+		CfgStore, err = json.NewCfgStore(path)
+		if err != nil {
+			return err
+		}
+	}
 	kp := os.Getenv("KEY_PATH")
 	if len(kp) == 0 {
 		kp = defaultKeyPath
@@ -266,6 +379,42 @@ func LoadFromEnv(cfgs map[string]interface{}, all bool) error {
 
 		return fmt.Errorf("%v is not string or parse type", v)
 	}
-
+	validLdapScope(cfgs, false)
 	return nil
+}
+
+// GetDatabaseFromCfg Create database object from config
+func GetDatabaseFromCfg(cfg map[string]interface{}) *models.Database {
+	database := &models.Database{}
+	database.Type = cfg[common.DatabaseType].(string)
+	postgresql := &models.PostGreSQL{}
+	postgresql.Host = cfg[common.PostGreSQLHOST].(string)
+	postgresql.Port = int(cfg[common.PostGreSQLPort].(int))
+	postgresql.Username = cfg[common.PostGreSQLUsername].(string)
+	postgresql.Password = cfg[common.PostGreSQLPassword].(string)
+	postgresql.Database = cfg[common.PostGreSQLDatabase].(string)
+	database.PostGreSQL = postgresql
+	return database
+}
+
+// Valid LDAP Scope
+func validLdapScope(cfg map[string]interface{}, isMigrate bool) {
+	ldapScope, ok := cfg[ldapScopeKey].(int)
+	if !ok {
+		ldapScopeFloat, ok := cfg[ldapScopeKey].(float64)
+		if ok {
+			ldapScope = int(ldapScopeFloat)
+		}
+	}
+	if isMigrate && ldapScope > 0 && ldapScope < 3 {
+		ldapScope = ldapScope - 1
+	}
+	if ldapScope >= 3 {
+		ldapScope = 2
+	}
+	if ldapScope < 0 {
+		ldapScope = 0
+	}
+	cfg[ldapScopeKey] = ldapScope
+
 }

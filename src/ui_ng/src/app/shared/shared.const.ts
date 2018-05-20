@@ -11,22 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-export const supportedLangs = ['en-us', 'zh-cn', 'es-es'];
+export const supportedLangs = ['en-us', 'zh-cn', 'es-es', 'fr-fr'];
 export const enLang = "en-us";
 export const languageNames = {
   "en-us": "English",
   "zh-cn": "中文简体",
-  "es-es": "Español"
+  "es-es": "Español",
+  "fr-fr": "Français"
 };
 export const enum AlertType {
   DANGER, WARNING, INFO, SUCCESS
-};
+}
 
 export const dismissInterval = 10 * 1000;
+
 export const httpStatusCode = {
   "Unauthorized": 401,
   "Forbidden": 403
 };
+
 export const enum ConfirmationTargets {
   EMPTY,
   PROJECT,
@@ -40,16 +43,17 @@ export const enum ConfirmationTargets {
   CONFIG,
   CONFIG_ROUTE,
   CONFIG_TAB
-};
+}
 
 export const enum ActionType {
   ADD_NEW, EDIT
-};
+}
 
 export const ListMode = {
   READONLY: "readonly",
   FULL: "full"
 };
+
 
 export const CommonRoutes = {
   SIGN_IN: "/sign-in",
@@ -68,7 +72,7 @@ export const enum ConfirmationState {
   NA, CONFIRMED, CANCEL
 }
 export const enum ConfirmationButtons {
-  CONFIRM_CANCEL, YES_NO, DELETE_CANCEL, CLOSE
+  CONFIRM_CANCEL, YES_NO, DELETE_CANCEL, CLOSE, SWITCH_CANCEL
 }
 
 export const ProjectTypes = { 0: 'PROJECT.ALL_PROJECTS', 1: 'PROJECT.PRIVATE_PROJECTS', 2: 'PROJECT.PUBLIC_PROJECTS' };
